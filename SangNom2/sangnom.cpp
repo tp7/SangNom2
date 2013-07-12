@@ -225,7 +225,7 @@ void SangNom2::processBuffers(int width, int height, int srcPitch, int dstPitch)
         auto pSrcn2 = pSrcn + bufferPitch_;
         auto pTemp = intermediate;
         
-        for (int y = 0; y < bufferHeight_ - 2; ++y) {
+        for (int y = 0; y < bufferHeight_ - 1; ++y) {
             auto zero = _mm_setzero_si128();
             for(int x = 0; x < bufferPitch_; x+= 16) {
                 auto src = simd_load_si128(reinterpret_cast<const __m128i*>(pSrc+x));
@@ -310,6 +310,7 @@ void SangNom2::processPlane(const BYTE* pSrc, BYTE* pDst, int width, int height,
     pSrc += offset_ * srcPitch;
     pDst += offset_ * dstPitch;
 
+    auto pDstn = pDst + dstPitch;
     auto pSrcn2 = pSrc + srcPitch*2;
     auto zero = _mm_setzero_si128();
     auto aav = _mm_set1_epi8(aa_);
@@ -387,11 +388,11 @@ void SangNom2::processPlane(const BYTE* pSrc, BYTE* pDst, int width, int height,
             acc = _mm_and_si128(acc, notEqualToMin);
             auto t2 = _mm_andnot_si128(notEqualToMin, avg);
             acc = _mm_or_si128(acc, t2);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pDst+x+dstPitch), acc);
+            simd_storeu_si128(reinterpret_cast<__m128i*>(pDstn+x), acc);
         }
         pSrc += srcPitch * 2;
         pSrcn2 += srcPitch * 2;
-        pDst += dstPitch *2;
+        pDstn += dstPitch *2;
         bufferOffset += bufferPitch_;
     }
 }
