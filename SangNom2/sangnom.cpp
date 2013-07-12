@@ -5,16 +5,16 @@
 #include <emmintrin.h>
 
 #ifdef __INTEL_COMPILER
-#define MT_FORCEINLINE inline
+#define SG_FORCEINLINE inline
 #else
-#define MT_FORCEINLINE __forceinline
+#define SG_FORCEINLINE __forceinline
 #endif
 
 #define USE_MOVPS
 
 extern "C" {
 
-    static MT_FORCEINLINE __m128i simd_load_si128(const __m128i* ptr) {
+    static SG_FORCEINLINE __m128i simd_load_si128(const __m128i* ptr) {
 #ifdef USE_MOVPS
         return _mm_castps_si128(_mm_load_ps(reinterpret_cast<const float*>(ptr)));
 #else
@@ -22,7 +22,7 @@ extern "C" {
 #endif
     }
 
-    static MT_FORCEINLINE __m128i simd_loadu_si128(const __m128i* ptr) {
+    static SG_FORCEINLINE __m128i simd_loadu_si128(const __m128i* ptr) {
 #ifdef USE_MOVPS
         return _mm_castps_si128(_mm_loadu_ps(reinterpret_cast<const float*>(ptr)));
 #else
@@ -30,7 +30,7 @@ extern "C" {
 #endif
     }
 
-    static MT_FORCEINLINE void simd_store_si128(__m128i *ptr, __m128i value) {
+    static SG_FORCEINLINE void simd_store_si128(__m128i *ptr, __m128i value) {
 #ifdef USE_MOVPS
         _mm_store_ps(reinterpret_cast<float*>(ptr), _mm_castsi128_ps(value));
 #else
@@ -38,7 +38,7 @@ extern "C" {
 #endif
     }
 
-    static MT_FORCEINLINE void simd_storeu_si128(__m128i *ptr, __m128i value) {
+    static SG_FORCEINLINE void simd_storeu_si128(__m128i *ptr, __m128i value) {
 #ifdef USE_MOVPS
         _mm_storeu_ps(reinterpret_cast<float*>(ptr), _mm_castsi128_ps(value));
 #else
