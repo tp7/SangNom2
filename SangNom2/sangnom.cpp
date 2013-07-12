@@ -482,9 +482,9 @@ public:
 
     ~SangNom2() {
         for (int i = 0; i < 9; i++) {
-            _mm_free(buffers[i]);
+            _mm_free(buffers_[i]);
         }
-        _mm_free(intermediate);
+        _mm_free(intermediate_);
     }
 
 private:
@@ -492,10 +492,10 @@ private:
     int offset_;
     int aa_;
 
-    BYTE *buffers[9];
+    BYTE *buffers_[9];
     int bufferPitch_;
     int bufferHeight_;
-    BYTE *intermediate;
+    BYTE *intermediate_;
 
     void processPlane(IScriptEnvironment* env, const BYTE* srcp, BYTE* dstp, int width, int height, int src_pitch, int dst_pitch);
 };
@@ -513,11 +513,11 @@ SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
         bufferPitch_ = (vi.width + 15) / 16 * 16;
         bufferHeight_ = (vi.height + 1) / 2;
         for (int i = 0; i < 9; i++) {
-            buffers[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_ * bufferHeight_, 16));
-            memset(buffers[i], 0,bufferPitch_ * bufferHeight_); //this is important
+            buffers_[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_ * bufferHeight_, 16));
+            memset(buffers_[i], 0,bufferPitch_ * bufferHeight_); //this is important
         }
-        intermediate = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_*2, 16));
-        //int edx = aa;
+        intermediate_ = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_*2, 16));
+        
         aa = min(128, aa);
         aa_ = (21 * aa) / 16;
 }
@@ -531,9 +531,9 @@ void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDs
         env->BitBlt(pDst+dstPitch * (height-1), dstPitch, pSrc + srcPitch*(height-2), srcPitch, width,1);
     }
 
-    prepareBuffers(pSrc + offset_*srcPitch, buffers, width, height, srcPitch, bufferPitch_);
-    processBuffers(buffers, intermediate, bufferPitch_, bufferHeight_);
-    finalizePlane(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers, srcPitch, dstPitch, bufferPitch_, width, height, aa_);
+    prepareBuffers(pSrc + offset_*srcPitch, buffers_, width, height, srcPitch, bufferPitch_);
+    processBuffers(buffers_, intermediate_, bufferPitch_, bufferHeight_);
+    finalizePlane(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa_);
 }
 
 
