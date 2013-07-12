@@ -79,7 +79,7 @@ private:
     int aa_;
 
     BYTE *buffers[9];
-    int bufferWidth_;
+    int bufferPitch_;
     int bufferHeight_;
     BYTE *intermediate;
 
@@ -99,13 +99,13 @@ SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
             env->ThrowError("Sorry, SSE2 is requried");
         }
 
-        bufferWidth_ = (vi.width + 15) / 16 * 16;
+        bufferPitch_ = (vi.width + 15) / 16 * 16;
         bufferHeight_ = (vi.height + 1) / 2;
         for (int i = 0; i < 9; i++) {
-            buffers[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferWidth_ * bufferHeight_, 16));
-            memset(buffers[i], 0,bufferWidth_ * bufferHeight_); //this is important
+            buffers[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_ * bufferHeight_, 16));
+            memset(buffers[i], 0,bufferPitch_ * bufferHeight_); //this is important
         }
-        intermediate = reinterpret_cast<BYTE*>(_mm_malloc(bufferWidth_*2, 16));
+        intermediate = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_*2, 16));
         //int edx = aa;
         aa = min(128, aa);
         aa_ = (21 * aa) / 16;
@@ -157,7 +157,7 @@ void SangNom2::prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int heigh
 
     int bufferOffset = width;
 
-    for (int y = 1; y < height / 2; y++) {
+    for (int y = 0; y < height / 2 - 1; y++) {
         for (int x = 0; x < width; x += 16) {
             auto cur_minus_3   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-3)); 
             auto cur_minus_2   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-2)); 
@@ -214,19 +214,19 @@ void SangNom2::prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int heigh
         }
         pSrc += srcPitch*2;
         pSrcn2 += srcPitch*2;
-        bufferOffset += width;
+        bufferOffset += bufferPitch_;
     }
 }
 
 void SangNom2::processBuffers(int width, int height, int srcPitch, int dstPitch) {
     for (int i = 0; i < 9; ++i) {
         auto pSrc = buffers[i];
-        auto pSrcn = pSrc + bufferWidth_;
-        auto pSrcn2 = pSrcn + bufferWidth_;
+        auto pSrcn = pSrc + bufferPitch_;
+        auto pSrcn2 = pSrcn + bufferPitch_;
         auto pDst = intermediate;
         auto zero = _mm_setzero_si128();
-        for (int y = 0; y < bufferHeight_ - 1; ++y) {
-            for(int x = 0; x < bufferWidth_; x+= 16) {
+        for (int y = 0; y < bufferHeight_ - 2; ++y) {
+            for(int x = 0; x < bufferPitch_; x+= 16) {
                 auto src = simd_load_si128(reinterpret_cast<const __m128i*>(pSrc+x));
                 auto srcn = simd_load_si128(reinterpret_cast<const __m128i*>(pSrcn+x));
                 auto srcn2 = simd_load_si128(reinterpret_cast<const __m128i*>(pSrcn2+x));
@@ -249,7 +249,7 @@ void SangNom2::processBuffers(int width, int height, int srcPitch, int dstPitch)
                 simd_store_si128(reinterpret_cast<__m128i*>(pDst+(x*2)+16), sum_hi);
             }
 
-            for (int x = 0; x < bufferWidth_; x+= 16) {
+            for (int x = 0; x < bufferPitch_; x+= 16) {
                 auto cur_minus_6_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2-6));
                 auto cur_minus_4_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2-4));
                 auto cur_minus_2_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2-2));
@@ -288,9 +288,9 @@ void SangNom2::processBuffers(int width, int height, int srcPitch, int dstPitch)
                 simd_store_si128(reinterpret_cast<__m128i*>(pSrcn+x), result);
             }
 
-            pSrc += bufferWidth_;
-            pSrcn += bufferWidth_;
-            pSrcn2 += bufferWidth_;
+            pSrc += bufferPitch_;
+            pSrcn += bufferPitch_;
+            pSrcn2 += bufferPitch_;
         }
     }
 }
@@ -312,18 +312,19 @@ void SangNom2::processPlane(const BYTE* pSrc, BYTE* pDst, int width, int height,
     auto pSrcn2 = pSrc + srcPitch*2;
     auto zero = _mm_setzero_si128();
     auto aav = _mm_set1_epi8(aa_);
+    int bufferOffset = bufferPitch_;
 
-    for (int y = 1; y < height / 2; ++y) {
+    for (int y = 0; y < height / 2 - 1; ++y) {
         for (int x = 0; x < width; x += 16) {
-            auto buf0 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_M3_P3]+x+y*width)); 
-            auto buf1 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_M2_P2]+x+y*width)); 
-            auto buf2 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_M1_P1]+x+y*width)); 
-            auto buf3 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[SG_FORWARD]+x+y*width)); 
-            auto buf4 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P0_M0]+x+y*width)); 
-            auto buf5 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[SG_REVERSE]+x+y*width)); 
-            auto buf6 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P1_M1]+x+y*width)); 
-            auto buf7 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P2_M2]+x+y*width)); 
-            auto buf8 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P3_M3]+x+y*width)); 
+            auto buf0 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_M3_P3] + bufferOffset + x)); 
+            auto buf1 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_M2_P2] + bufferOffset + x)); 
+            auto buf2 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_M1_P1] + bufferOffset + x)); 
+            auto buf3 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[SG_FORWARD]  + bufferOffset + x)); 
+            auto buf4 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P0_M0] + bufferOffset + x)); 
+            auto buf5 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[SG_REVERSE]  + bufferOffset + x)); 
+            auto buf6 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P1_M1] + bufferOffset + x)); 
+            auto buf7 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P2_M2] + bufferOffset + x)); 
+            auto buf8 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P3_M3] + bufferOffset + x)); 
 
             auto cur_minus_3   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-3)); 
             auto cur_minus_2   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-2)); 
@@ -390,6 +391,7 @@ void SangNom2::processPlane(const BYTE* pSrc, BYTE* pDst, int width, int height,
         pSrc += srcPitch * 2;
         pSrcn2 += srcPitch * 2;
         pDst += dstPitch *2;
+        bufferOffset += bufferPitch_;
     }
 }
 
