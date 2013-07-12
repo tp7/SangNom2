@@ -187,56 +187,8 @@ enum Buffers {
     SG_REVERSE = 5
 };
 
-class SangNom2 : public GenericVideoFilter {
-public:
-    SangNom2(PClip child, int order, int aa, IScriptEnvironment* env);
+const unsigned int BUFFERS_COUNT = 9;
 
-    PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
-
-    ~SangNom2() {
-        for (int i = 0; i < 9; i++) {
-            _mm_free(buffers[i]);
-        }
-        _mm_free(intermediate);
-    }
-
-private:
-    int order_;
-    int offset_;
-    int aa_;
-
-    BYTE *buffers[9];
-    int bufferPitch_;
-    int bufferHeight_;
-    BYTE *intermediate;
-
-    void processPlane(IScriptEnvironment* env, const BYTE* srcp, BYTE* dstp, int width, int height, int src_pitch, int dst_pitch);
-    void processPlane(const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch);
-    void prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch);
-    void processBuffers( int width, int height, int srcPitch, int dstPitch );
-};
-
-SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
-    : GenericVideoFilter(child), order_(order) {
-        if(!vi.IsPlanar()) {
-            env->ThrowError("SangNom2 works only with planar colorspaces");
-        }
-
-        if (!(env->GetCPUFlags() && CPUF_SSE2)) {
-            env->ThrowError("Sorry, SSE2 is requried");
-        }
-
-        bufferPitch_ = (vi.width + 15) / 16 * 16;
-        bufferHeight_ = (vi.height + 1) / 2;
-        for (int i = 0; i < 9; i++) {
-            buffers[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_ * bufferHeight_, 16));
-            memset(buffers[i], 0,bufferPitch_ * bufferHeight_); //this is important
-        }
-        intermediate = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_*2, 16));
-        //int edx = aa;
-        aa = min(128, aa);
-        aa_ = (21 * aa) / 16;
-}
 
 static __forceinline __m128i simd_abs_diff_epu8(__m128i a, __m128i b) {
     auto positive = _mm_subs_epu8(a, b);
@@ -277,8 +229,19 @@ static __forceinline __m128i calculateSangnom(const __m128i& p1, const __m128i& 
     return _mm_packus_epi16(temp_lo, temp_hi); //(p1*4 + p2*5 - p3) / 8
 }
 
-void SangNom2::prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch) {
-    pSrc += offset_ * srcPitch;
+
+static __forceinline __m128i doSomeWeirdMagic(const __m128i& a1, const __m128i& a2, const __m128i& buf, 
+                                              const __m128i& minv, const __m128i& acc, const __m128i& zero) {
+                                                  auto average = _mm_avg_epu8(a1, a2);
+                                                  auto equalToMin = _mm_cmpeq_epi8(buf, minv);
+                                                  auto notEqualToMin = _mm_cmpeq_epi8(equalToMin, zero);
+                                                  auto accNotMin = _mm_and_si128(acc, notEqualToMin);
+                                                  auto idk = _mm_andnot_si128(notEqualToMin, average);
+                                                  return _mm_or_si128(accNotMin, idk);   
+}
+
+
+void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, int height, int srcPitch, int bufferPitch) {
     auto pSrcn2 = pSrc + srcPitch*2;
     auto zero = _mm_setzero_si128();
 
@@ -303,25 +266,25 @@ void SangNom2::prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int heigh
             auto next_plus_3   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x+3)); 
 
             auto adiff_m3_p3 = simd_abs_diff_epu8(cur_minus_3, next_plus_3);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(buffers[ADIFF_M3_P3]+bufferOffset+x), adiff_m3_p3);
+            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_M3_P3]+bufferOffset+x), adiff_m3_p3);
 
             auto adiff_m2_p2 = simd_abs_diff_epu8(cur_minus_2, next_plus_2);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(buffers[ADIFF_M2_P2]+bufferOffset+x), adiff_m2_p2);
+            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_M2_P2]+bufferOffset+x), adiff_m2_p2);
 
             auto adiff_m1_p1 = simd_abs_diff_epu8(cur_minus_1, next_plus_1);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(buffers[ADIFF_M1_P1]+bufferOffset+x), adiff_m1_p1);
+            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_M1_P1]+bufferOffset+x), adiff_m1_p1);
 
             auto adiff_0     = simd_abs_diff_epu8(cur, next);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(buffers[ADIFF_P0_M0]+bufferOffset+x), adiff_0);
+            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P0_M0]+bufferOffset+x), adiff_0);
 
             auto adiff_p1_m1 = simd_abs_diff_epu8(cur_plus_1, next_minus_1);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(buffers[ADIFF_P1_M1]+bufferOffset+x), adiff_p1_m1);
+            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P1_M1]+bufferOffset+x), adiff_p1_m1);
 
             auto adiff_p2_m2 = simd_abs_diff_epu8(cur_plus_2, next_minus_2);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(buffers[ADIFF_P2_M2]+bufferOffset+x), adiff_p2_m2);
+            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P2_M2]+bufferOffset+x), adiff_p2_m2);
 
             auto adiff_p3_m3 = simd_abs_diff_epu8(cur_plus_3, next_minus_3);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(buffers[ADIFF_P3_M3]+bufferOffset+x), adiff_p3_m3);
+            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P3_M3]+bufferOffset+x), adiff_p3_m3);
 
             //////////////////////////////////////////////////////////////////////////
             auto temp1 = calculateSangnom(cur_minus_1, cur, cur_plus_1);
@@ -329,32 +292,31 @@ void SangNom2::prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int heigh
 
             //abs((cur_minus_1*4 + cur*5 - cur_plus_1) / 8  - (next_plus_1*4 + next*5 - next_minus_1) / 8)
             auto absdiff_p1_p2 = simd_abs_diff_epu8(temp1, temp2); 
-            simd_storeu_si128(reinterpret_cast<__m128i*>(buffers[SG_FORWARD]+bufferOffset+x), absdiff_p1_p2);
+            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[SG_FORWARD]+bufferOffset+x), absdiff_p1_p2);
             //////////////////////////////////////////////////////////////////////////
             auto temp3 = calculateSangnom(cur_plus_1, cur, cur_minus_1);
             auto temp4 = calculateSangnom(next_minus_1, next, next_plus_1);
 
             //abs((cur_plus_1*4 + cur*5 - cur_minus_1) / 8  - (next_minus_1*4 + next*5 - next_plus_1) / 8)
             auto absdiff_p3_p4 = simd_abs_diff_epu8(temp3, temp4);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(buffers[SG_REVERSE]+bufferOffset+x), absdiff_p3_p4);
+            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[SG_REVERSE]+bufferOffset+x), absdiff_p3_p4);
             //////////////////////////////////////////////////////////////////////////
         }
         pSrc += srcPitch*2;
         pSrcn2 += srcPitch*2;
-        bufferOffset += bufferPitch_;
+        bufferOffset += bufferPitch;
     }
 }
 
-void SangNom2::processBuffers(int width, int height, int srcPitch, int dstPitch) {
-    for (int i = 0; i < 9; ++i) {
-        auto pSrc = buffers[i];
-        auto pSrcn = pSrc + bufferPitch_;
-        auto pSrcn2 = pSrcn + bufferPitch_;
-        auto pTemp = intermediate;
-        
-        for (int y = 0; y < bufferHeight_ - 1; ++y) {
+void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch, int height) {
+    for (int i = 0; i < BUFFERS_COUNT; ++i) {
+        auto pSrc = pBuffers[i];
+        auto pSrcn = pSrc + pitch;
+        auto pSrcn2 = pSrcn + pitch;
+
+        for (int y = 0; y < height - 1; ++y) {
             auto zero = _mm_setzero_si128();
-            for(int x = 0; x < bufferPitch_; x+= 16) {
+            for(int x = 0; x < pitch; x+= 16) {
                 auto src = simd_load_si128(reinterpret_cast<const __m128i*>(pSrc+x));
                 auto srcn = simd_load_si128(reinterpret_cast<const __m128i*>(pSrcn+x));
                 auto srcn2 = simd_load_si128(reinterpret_cast<const __m128i*>(pSrcn2+x));
@@ -377,7 +339,7 @@ void SangNom2::processBuffers(int width, int height, int srcPitch, int dstPitch)
                 simd_store_si128(reinterpret_cast<__m128i*>(pTemp+(x*2)+16), sum_hi);
             }
 
-            for (int x = 0; x < bufferPitch_; x+= 16) {
+            for (int x = 0; x < pitch; x+= 16) {
                 auto cur_minus_6_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-6));
                 auto cur_minus_4_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-4));
                 auto cur_minus_2_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-2));
@@ -416,44 +378,31 @@ void SangNom2::processBuffers(int width, int height, int srcPitch, int dstPitch)
                 simd_store_si128(reinterpret_cast<__m128i*>(pSrcn+x), result);
             }
 
-            pSrc += bufferPitch_;
-            pSrcn += bufferPitch_;
-            pSrcn2 += bufferPitch_;
+            pSrc += pitch;
+            pSrcn += pitch;
+            pSrcn2 += pitch;
         }
     }
 }
 
-static __forceinline __m128i doSomeWeirdMagic(const __m128i& a1, const __m128i& a2, const __m128i& buf, 
-                                             const __m128i& minv, const __m128i& acc, const __m128i& zero) {
-    auto average = _mm_avg_epu8(a1, a2);
-    auto equalToMin = _mm_cmpeq_epi8(buf, minv);
-    auto notEqualToMin = _mm_cmpeq_epi8(equalToMin, zero);
-    auto accNotMin = _mm_and_si128(acc, notEqualToMin);
-    auto idk = _mm_andnot_si128(notEqualToMin, average);
-    return _mm_or_si128(accNotMin, idk);   
-}
-
-void SangNom2::processPlane(const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch) {
-    pSrc += offset_ * srcPitch;
-    pDst += offset_ * dstPitch;
-
+void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch, int bufferPitch, int width, int height, int aa) {
     auto pDstn = pDst + dstPitch;
     auto pSrcn2 = pSrc + srcPitch*2;
     auto zero = _mm_setzero_si128();
-    auto aav = _mm_set1_epi8(aa_);
-    int bufferOffset = bufferPitch_;
+    auto aav = _mm_set1_epi8(aa);
+    int bufferOffset = bufferPitch;
 
     for (int y = 0; y < height / 2 - 1; ++y) {
         for (int x = 0; x < width; x += 16) {
-            auto buf0 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_M3_P3] + bufferOffset + x)); 
-            auto buf1 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_M2_P2] + bufferOffset + x)); 
-            auto buf2 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_M1_P1] + bufferOffset + x)); 
-            auto buf3 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[SG_FORWARD]  + bufferOffset + x)); 
-            auto buf4 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P0_M0] + bufferOffset + x)); 
-            auto buf5 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[SG_REVERSE]  + bufferOffset + x)); 
-            auto buf6 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P1_M1] + bufferOffset + x)); 
-            auto buf7 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P2_M2] + bufferOffset + x)); 
-            auto buf8 = simd_loadu_si128(reinterpret_cast<const __m128i*>(buffers[ADIFF_P3_M3] + bufferOffset + x)); 
+            auto buf0 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_M3_P3] + bufferOffset + x)); 
+            auto buf1 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_M2_P2] + bufferOffset + x)); 
+            auto buf2 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_M1_P1] + bufferOffset + x)); 
+            auto buf3 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[SG_FORWARD]  + bufferOffset + x)); 
+            auto buf4 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P0_M0] + bufferOffset + x)); 
+            auto buf5 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[SG_REVERSE]  + bufferOffset + x)); 
+            auto buf6 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P1_M1] + bufferOffset + x)); 
+            auto buf7 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P2_M2] + bufferOffset + x)); 
+            auto buf8 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P3_M3] + bufferOffset + x)); 
 
             auto cur_minus_3   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-3)); 
             auto cur_minus_2   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-2)); 
@@ -494,12 +443,12 @@ void SangNom2::processPlane(const BYTE* pSrc, BYTE* pDst, int width, int height,
             //////////////////////////////////////////////////////////////////////////
             auto temp1 = calculateSangnom(cur_minus_1, cur, cur_plus_1);
             auto temp2 = calculateSangnom(next_plus_1, next, next_minus_1);
-            
+
             acc = doSomeWeirdMagic(temp1, temp2, buf3, minv, acc, zero);
             //////////////////////////////////////////////////////////////////////////
             auto temp3 = calculateSangnom(cur_plus_1, cur, cur_minus_1);
             auto temp4 = calculateSangnom(next_minus_1, next, next_plus_1);
-            
+
             acc = doSomeWeirdMagic(temp3, temp4, buf5, minv, acc, zero);
             //////////////////////////////////////////////////////////////////////////
 
@@ -520,10 +469,58 @@ void SangNom2::processPlane(const BYTE* pSrc, BYTE* pDst, int width, int height,
         pSrc += srcPitch * 2;
         pSrcn2 += srcPitch * 2;
         pDstn += dstPitch *2;
-        bufferOffset += bufferPitch_;
+        bufferOffset += bufferPitch;
     }
 }
 
+
+class SangNom2 : public GenericVideoFilter {
+public:
+    SangNom2(PClip child, int order, int aa, IScriptEnvironment* env);
+
+    PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
+
+    ~SangNom2() {
+        for (int i = 0; i < 9; i++) {
+            _mm_free(buffers[i]);
+        }
+        _mm_free(intermediate);
+    }
+
+private:
+    int order_;
+    int offset_;
+    int aa_;
+
+    BYTE *buffers[9];
+    int bufferPitch_;
+    int bufferHeight_;
+    BYTE *intermediate;
+
+    void processPlane(IScriptEnvironment* env, const BYTE* srcp, BYTE* dstp, int width, int height, int src_pitch, int dst_pitch);
+};
+
+SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
+    : GenericVideoFilter(child), order_(order) {
+        if(!vi.IsPlanar()) {
+            env->ThrowError("SangNom2 works only with planar colorspaces");
+        }
+
+        if (!(env->GetCPUFlags() && CPUF_SSE2)) {
+            env->ThrowError("Sorry, SSE2 is requried");
+        }
+
+        bufferPitch_ = (vi.width + 15) / 16 * 16;
+        bufferHeight_ = (vi.height + 1) / 2;
+        for (int i = 0; i < 9; i++) {
+            buffers[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_ * bufferHeight_, 16));
+            memset(buffers[i], 0,bufferPitch_ * bufferHeight_); //this is important
+        }
+        intermediate = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_*2, 16));
+        //int edx = aa;
+        aa = min(128, aa);
+        aa_ = (21 * aa) / 16;
+}
 
 void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch) {
     env->BitBlt(pDst + offset_ * dstPitch, dstPitch * 2, pSrc + offset_ * srcPitch, srcPitch * 2, width, height / 2);
@@ -534,9 +531,9 @@ void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDs
         env->BitBlt(pDst+dstPitch * (height-1), dstPitch, pSrc + srcPitch*(height-2), srcPitch, width,1);
     }
 
-    prepareBuffers(pSrc, pDst, width, height, srcPitch, dstPitch);
-    processBuffers(width, height, srcPitch, dstPitch);
-    processPlane(pSrc, pDst, width, height, srcPitch, dstPitch);
+    prepareBuffers(pSrc + offset_*srcPitch, buffers, width, height, srcPitch, bufferPitch_);
+    processBuffers(buffers, intermediate, bufferPitch_, bufferHeight_);
+    finalizePlane(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers, srcPitch, dstPitch, bufferPitch_, width, height, aa_);
 }
 
 
