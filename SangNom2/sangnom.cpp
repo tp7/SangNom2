@@ -223,9 +223,10 @@ void SangNom2::processBuffers(int width, int height, int srcPitch, int dstPitch)
         auto pSrc = buffers[i];
         auto pSrcn = pSrc + bufferPitch_;
         auto pSrcn2 = pSrcn + bufferPitch_;
-        auto pDst = intermediate;
-        auto zero = _mm_setzero_si128();
+        auto pTemp = intermediate;
+        
         for (int y = 0; y < bufferHeight_ - 2; ++y) {
+            auto zero = _mm_setzero_si128();
             for(int x = 0; x < bufferPitch_; x+= 16) {
                 auto src = simd_load_si128(reinterpret_cast<const __m128i*>(pSrc+x));
                 auto srcn = simd_load_si128(reinterpret_cast<const __m128i*>(pSrcn+x));
@@ -245,26 +246,26 @@ void SangNom2::processBuffers(int width, int height, int srcPitch, int dstPitch)
                 auto sum_hi = _mm_adds_epu16(src_hi, srcn_hi);
                 sum_hi = _mm_adds_epu16(sum_hi, srcn2_hi);
 
-                simd_store_si128(reinterpret_cast<__m128i*>(pDst+(x*2)), sum_lo);
-                simd_store_si128(reinterpret_cast<__m128i*>(pDst+(x*2)+16), sum_hi);
+                simd_store_si128(reinterpret_cast<__m128i*>(pTemp+(x*2)), sum_lo);
+                simd_store_si128(reinterpret_cast<__m128i*>(pTemp+(x*2)+16), sum_hi);
             }
 
             for (int x = 0; x < bufferPitch_; x+= 16) {
-                auto cur_minus_6_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2-6));
-                auto cur_minus_4_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2-4));
-                auto cur_minus_2_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2-2));
-                auto cur_lo         = simd_load_si128(reinterpret_cast<const __m128i*>(pDst+x*2));
-                auto cur_plus_2_lo  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2+2));
-                auto cur_plus_4_lo  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2+4));
-                auto cur_plus_6_lo  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2+6));
+                auto cur_minus_6_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-6));
+                auto cur_minus_4_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-4));
+                auto cur_minus_2_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-2));
+                auto cur_lo         = simd_load_si128(reinterpret_cast<const __m128i*>(pTemp+x*2));
+                auto cur_plus_2_lo  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+2));
+                auto cur_plus_4_lo  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+4));
+                auto cur_plus_6_lo  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+6));
 
-                auto cur_minus_6_hi = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2-6+16));
-                auto cur_minus_4_hi = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2-4+16));
-                auto cur_minus_2_hi = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2-2+16));
-                auto cur_hi         = simd_load_si128(reinterpret_cast<const __m128i*>(pDst+x*2+16));
-                auto cur_plus_2_hi  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2+2+16));
-                auto cur_plus_4_hi  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2+4+16));
-                auto cur_plus_6_hi  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pDst+x*2+6+16));
+                auto cur_minus_6_hi = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-6+16));
+                auto cur_minus_4_hi = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-4+16));
+                auto cur_minus_2_hi = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-2+16));
+                auto cur_hi         = simd_load_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+16));
+                auto cur_plus_2_hi  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+2+16));
+                auto cur_plus_4_hi  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+4+16));
+                auto cur_plus_6_hi  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+6+16));
 
                 auto sum_lo = _mm_adds_epu16(cur_minus_6_lo, cur_minus_4_lo);
                 sum_lo = _mm_adds_epu16(sum_lo, cur_minus_2_lo);
