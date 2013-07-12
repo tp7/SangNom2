@@ -47,6 +47,133 @@ extern "C" {
     }
 }
 
+template<bool isBorder, decltype(simd_load_si128) load>
+static SG_FORCEINLINE __m128i load_one_to_left(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_setr_epi8(0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto val = load(reinterpret_cast<const __m128i*>(ptr));
+        return _mm_or_si128(_mm_slli_si128(val, 1), _mm_and_si128(val, mask));
+    } else {
+        return simd_loadu_si128(reinterpret_cast<const __m128i*>(ptr - 1));
+    }
+}
+
+template<bool isBorder, decltype(simd_load_si128) load>
+static SG_FORCEINLINE __m128i load_two_to_left(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_setr_epi8(0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto val = load(reinterpret_cast<const __m128i*>(ptr));
+        val = _mm_unpacklo_epi8(val, val);
+        return _mm_or_si128(val, _mm_and_si128(val, mask));
+    } else {
+        return simd_loadu_si128(reinterpret_cast<const __m128i*>(ptr - 2));
+    }
+}
+
+template<bool isBorder, decltype(simd_load_si128) load>
+static SG_FORCEINLINE __m128i load_three_to_left(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_setr_epi8(0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto val = load(reinterpret_cast<const __m128i*>(ptr));
+        val = _mm_unpacklo_epi8(val, val);
+        val = _mm_unpacklo_epi16(val, val);
+        return _mm_or_si128(val, _mm_and_si128(val, mask));
+    } else {
+        return simd_loadu_si128(reinterpret_cast<const __m128i*>(ptr - 3));
+    }
+}
+
+template<bool isBorder, decltype(simd_load_si128) load>
+static SG_FORCEINLINE __m128i load_four_to_left(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_setr_epi8(0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto val = load(reinterpret_cast<const __m128i*>(ptr));
+        val = _mm_unpacklo_epi8(val, val);
+        val = _mm_unpacklo_epi16(val, val);
+        return _mm_or_si128(val, _mm_and_si128(val, mask));
+    } else {
+        return simd_loadu_si128(reinterpret_cast<const __m128i*>(ptr - 4));
+    }
+}
+
+template<bool isBorder, decltype(simd_load_si128) load>
+static SG_FORCEINLINE __m128i load_six_to_left(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_setr_epi8(0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto val = load(reinterpret_cast<const __m128i*>(ptr));
+        val = _mm_unpacklo_epi8(val, val);
+        val = _mm_unpacklo_epi16(val, val);
+        val = _mm_unpacklo_epi32(val, val);
+        return _mm_or_si128(val, _mm_and_si128(val, mask));
+    } else {
+        return simd_loadu_si128(reinterpret_cast<const __m128i*>(ptr - 6));
+    }
+}
+
+//note the difference betwttn set and setr for left and right loading
+template<bool isBorder, decltype(simd_load_si128) load>
+static SG_FORCEINLINE __m128i load_one_to_right(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_set_epi8(0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto val = load(reinterpret_cast<const __m128i*>(ptr));
+        return _mm_or_si128(_mm_srli_si128(val, 1), _mm_and_si128(val, mask));
+    } else {
+        return simd_loadu_si128(reinterpret_cast<const __m128i*>(ptr + 1));
+    }
+}
+
+template<bool isBorder, decltype(simd_load_si128) load>
+static SG_FORCEINLINE __m128i load_two_to_right(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_set_epi8(0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto val = load(reinterpret_cast<const __m128i*>(ptr));
+        val = _mm_unpackhi_epi8(val, val);
+        return _mm_or_si128(val, _mm_and_si128(val, mask));
+    } else {
+        return simd_loadu_si128(reinterpret_cast<const __m128i*>(ptr + 2));
+    }
+}
+
+template<bool isBorder, decltype(simd_load_si128) load>
+static SG_FORCEINLINE __m128i load_three_to_right(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_set_epi8(0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto val = load(reinterpret_cast<const __m128i*>(ptr));
+        val = _mm_unpackhi_epi8(val, val);
+        val = _mm_unpackhi_epi16(val, val);
+        return _mm_or_si128(val, _mm_and_si128(val, mask));
+    } else {
+        return simd_loadu_si128(reinterpret_cast<const __m128i*>(ptr + 3));
+    }
+}
+
+template<bool isBorder, decltype(simd_load_si128) load>
+static SG_FORCEINLINE __m128i load_four_to_right(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_set_epi8(0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto val = load(reinterpret_cast<const __m128i*>(ptr));
+        val = _mm_unpackhi_epi8(val, val);
+        val = _mm_unpackhi_epi16(val, val);
+        return _mm_or_si128(val, _mm_and_si128(val, mask));
+    } else {
+        return simd_loadu_si128(reinterpret_cast<const __m128i*>(ptr + 4));
+    }
+}
+
+template<bool isBorder, decltype(simd_load_si128) load>
+static SG_FORCEINLINE __m128i load_six_to_right(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_set_epi8(0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto val = load(reinterpret_cast<const __m128i*>(ptr));
+        val = _mm_unpackhi_epi8(val, val);
+        val = _mm_unpackhi_epi16(val, val);
+        val = _mm_unpackhi_epi32(val, val);
+        return _mm_or_si128(val, _mm_and_si128(val, mask));
+    } else {
+        return simd_loadu_si128(reinterpret_cast<const __m128i*>(ptr + 6));
+    }
+}
+
 enum Buffers {
     ADIFF_M3_P3 = 0,
     ADIFF_M2_P2 = 1,
