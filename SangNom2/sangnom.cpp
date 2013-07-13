@@ -49,22 +49,22 @@ extern "C" {
 
 #pragma warning(disable: 4309)
 
-template<bool isBorder, decltype(simd_load_si128) load>
-static SG_FORCEINLINE __m128i load_one_to_left(const BYTE *ptr) {
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_one_to_left(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
-        auto val = load(ptr);
+        auto val = simd_load(ptr);
         return _mm_or_si128(_mm_slli_si128(val, 1), _mm_and_si128(val, mask));
     } else {
         return simd_loadu_si128(ptr - 1);
     }
 }
 
-template<bool isBorder, decltype(simd_load_si128) load>
-static SG_FORCEINLINE __m128i load_two_to_left(const BYTE *ptr) {
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_two_to_left(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
-        auto val = load(ptr);
+        auto val = simd_load(ptr);
         val = _mm_unpacklo_epi8(val, val);
         return _mm_or_si128(val, _mm_and_si128(val, mask));
     } else {
@@ -72,11 +72,11 @@ static SG_FORCEINLINE __m128i load_two_to_left(const BYTE *ptr) {
     }
 }
 
-template<bool isBorder, decltype(simd_load_si128) load>
-static SG_FORCEINLINE __m128i load_three_to_left(const BYTE *ptr) {
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_three_to_left(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
-        auto val = load(ptr);
+        auto val = simd_load(ptr);
         val = _mm_unpacklo_epi8(val, val);
         val = _mm_unpacklo_epi16(val, val);
         return _mm_or_si128(val, _mm_and_si128(val, mask));
@@ -85,11 +85,11 @@ static SG_FORCEINLINE __m128i load_three_to_left(const BYTE *ptr) {
     }
 }
 
-template<bool isBorder, decltype(simd_load_si128) load>
-static SG_FORCEINLINE __m128i load_four_to_left(const BYTE *ptr) {
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_four_to_left(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
-        auto val = load(ptr);
+        auto val = simd_load(ptr);
         val = _mm_unpacklo_epi8(val, val);
         val = _mm_unpacklo_epi16(val, val);
         return _mm_or_si128(val, _mm_and_si128(val, mask));
@@ -98,11 +98,11 @@ static SG_FORCEINLINE __m128i load_four_to_left(const BYTE *ptr) {
     }
 }
 
-template<bool isBorder, decltype(simd_load_si128) load>
-static SG_FORCEINLINE __m128i load_six_to_left(const BYTE *ptr) {
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_six_to_left(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
-        auto val = load(ptr);
+        auto val = simd_load(ptr);
         val = _mm_unpacklo_epi8(val, val);
         val = _mm_unpacklo_epi16(val, val);
         val = _mm_unpacklo_epi32(val, val);
@@ -113,22 +113,22 @@ static SG_FORCEINLINE __m128i load_six_to_left(const BYTE *ptr) {
 }
 
 //note the difference between set and setr for left and right loading
-template<bool isBorder, decltype(simd_load_si128) load>
-static SG_FORCEINLINE __m128i load_one_to_right(const BYTE *ptr) {
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_one_to_right(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
-        auto val = load(ptr);
+        auto val = simd_load(ptr);
         return _mm_or_si128(_mm_srli_si128(val, 1), _mm_and_si128(val, mask));
     } else {
         return simd_loadu_si128(ptr + 1);
     }
 }
 
-template<bool isBorder, decltype(simd_load_si128) load>
-static SG_FORCEINLINE __m128i load_two_to_right(const BYTE *ptr) {
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_two_to_right(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
-        auto val = load(ptr);
+        auto val = simd_load(ptr);
         val = _mm_unpackhi_epi8(val, val);
         return _mm_or_si128(val, _mm_and_si128(val, mask));
     } else {
@@ -136,11 +136,11 @@ static SG_FORCEINLINE __m128i load_two_to_right(const BYTE *ptr) {
     }
 }
 
-template<bool isBorder, decltype(simd_load_si128) load>
-static SG_FORCEINLINE __m128i load_three_to_right(const BYTE *ptr) {
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_three_to_right(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
-        auto val = load(ptr);
+        auto val = simd_load(ptr);
         val = _mm_unpackhi_epi8(val, val);
         val = _mm_unpackhi_epi16(val, val);
         return _mm_or_si128(val, _mm_and_si128(val, mask));
@@ -149,11 +149,11 @@ static SG_FORCEINLINE __m128i load_three_to_right(const BYTE *ptr) {
     }
 }
 
-template<bool isBorder, decltype(simd_load_si128) load>
-static SG_FORCEINLINE __m128i load_four_to_right(const BYTE *ptr) {
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_four_to_right(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
-        auto val = load(ptr);
+        auto val = simd_load(ptr);
         val = _mm_unpackhi_epi8(val, val);
         val = _mm_unpackhi_epi16(val, val);
         return _mm_or_si128(val, _mm_and_si128(val, mask));
@@ -162,11 +162,11 @@ static SG_FORCEINLINE __m128i load_four_to_right(const BYTE *ptr) {
     }
 }
 
-template<bool isBorder, decltype(simd_load_si128) load>
-static SG_FORCEINLINE __m128i load_six_to_right(const BYTE *ptr) {
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_six_to_right(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
-        auto val = load(ptr);
+        auto val = simd_load(ptr);
         val = _mm_unpackhi_epi8(val, val);
         val = _mm_unpackhi_epi16(val, val);
         val = _mm_unpackhi_epi32(val, val);
@@ -245,7 +245,7 @@ static __forceinline __m128i doSomeWeirdMagic(const __m128i& a1, const __m128i& 
 }
 
 
-template<decltype(simd_load_si128) load, decltype(simd_store_si128) store>
+template<decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
 void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, int height, int srcPitch, int bufferPitch) {
     auto pSrcn2 = pSrc + srcPitch*2;
     auto zero = _mm_setzero_si128();
@@ -254,42 +254,42 @@ void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, 
 
     for (int y = 0; y < height / 2 - 1; y++) {
         for (int x = 0; x < width; x += 16) {
-            auto cur_minus_3   = load_three_to_left<false, load>(pSrc+x); 
-            auto cur_minus_2   = load_two_to_left<false, load>(pSrc+x); 
-            auto cur_minus_1   = load_one_to_left<false, load>(pSrc+x); 
-            auto cur           = load(pSrc+x);
-            auto cur_plus_1    = load_one_to_right<false, load>(pSrc+x); 
-            auto cur_plus_2    = load_two_to_right<false, load>(pSrc+x); 
-            auto cur_plus_3    = load_three_to_right<false, load>(pSrc+x); 
+            auto cur_minus_3   = simd_load_three_to_left<false, simd_load>(pSrc+x); 
+            auto cur_minus_2   = simd_load_two_to_left<false, simd_load>(pSrc+x); 
+            auto cur_minus_1   = simd_load_one_to_left<false, simd_load>(pSrc+x); 
+            auto cur           = simd_load(pSrc+x);
+            auto cur_plus_1    = simd_load_one_to_right<false, simd_load>(pSrc+x); 
+            auto cur_plus_2    = simd_load_two_to_right<false, simd_load>(pSrc+x); 
+            auto cur_plus_3    = simd_load_three_to_right<false, simd_load>(pSrc+x); 
 
-            auto next_minus_3  = load_three_to_left<false, load>(pSrcn2+x); 
-            auto next_minus_2  = load_two_to_left<false, load>(pSrcn2+x); 
-            auto next_minus_1  = load_one_to_left<false, load>(pSrcn2+x); 
-            auto next          = load(pSrcn2+x); 
-            auto next_plus_1   = load_one_to_right<false, load>(pSrcn2+x); 
-            auto next_plus_2   = load_two_to_right<false, load>(pSrcn2+x); 
-            auto next_plus_3   = load_three_to_right<false, load>(pSrcn2+x); 
+            auto next_minus_3  = simd_load_three_to_left<false, simd_load>(pSrcn2+x); 
+            auto next_minus_2  = simd_load_two_to_left<false, simd_load>(pSrcn2+x); 
+            auto next_minus_1  = simd_load_one_to_left<false, simd_load>(pSrcn2+x); 
+            auto next          = simd_load(pSrcn2+x); 
+            auto next_plus_1   = simd_load_one_to_right<false, simd_load>(pSrcn2+x); 
+            auto next_plus_2   = simd_load_two_to_right<false, simd_load>(pSrcn2+x); 
+            auto next_plus_3   = simd_load_three_to_right<false, simd_load>(pSrcn2+x); 
 
             auto adiff_m3_p3 = simd_abs_diff_epu8(cur_minus_3, next_plus_3);
-            store(pBuffers[ADIFF_M3_P3]+bufferOffset+x, adiff_m3_p3);
+            simd_store(pBuffers[ADIFF_M3_P3]+bufferOffset+x, adiff_m3_p3);
 
             auto adiff_m2_p2 = simd_abs_diff_epu8(cur_minus_2, next_plus_2);
-            store(pBuffers[ADIFF_M2_P2]+bufferOffset+x, adiff_m2_p2);
+            simd_store(pBuffers[ADIFF_M2_P2]+bufferOffset+x, adiff_m2_p2);
 
             auto adiff_m1_p1 = simd_abs_diff_epu8(cur_minus_1, next_plus_1);
-            store(pBuffers[ADIFF_M1_P1]+bufferOffset+x, adiff_m1_p1);
+            simd_store(pBuffers[ADIFF_M1_P1]+bufferOffset+x, adiff_m1_p1);
 
             auto adiff_0     = simd_abs_diff_epu8(cur, next);
-            store(pBuffers[ADIFF_P0_M0]+bufferOffset+x, adiff_0);
+            simd_store(pBuffers[ADIFF_P0_M0]+bufferOffset+x, adiff_0);
 
             auto adiff_p1_m1 = simd_abs_diff_epu8(cur_plus_1, next_minus_1);
-            store(pBuffers[ADIFF_P1_M1]+bufferOffset+x, adiff_p1_m1);
+            simd_store(pBuffers[ADIFF_P1_M1]+bufferOffset+x, adiff_p1_m1);
 
             auto adiff_p2_m2 = simd_abs_diff_epu8(cur_plus_2, next_minus_2);
-            store(pBuffers[ADIFF_P2_M2]+bufferOffset+x, adiff_p2_m2);
+            simd_store(pBuffers[ADIFF_P2_M2]+bufferOffset+x, adiff_p2_m2);
 
             auto adiff_p3_m3 = simd_abs_diff_epu8(cur_plus_3, next_minus_3);
-            store(pBuffers[ADIFF_P3_M3]+bufferOffset+x, adiff_p3_m3);
+            simd_store(pBuffers[ADIFF_P3_M3]+bufferOffset+x, adiff_p3_m3);
 
             //////////////////////////////////////////////////////////////////////////
             auto temp1 = calculateSangnom(cur_minus_1, cur, cur_plus_1);
@@ -297,14 +297,14 @@ void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, 
 
             //abs((cur_minus_1*4 + cur*5 - cur_plus_1) / 8  - (next_plus_1*4 + next*5 - next_minus_1) / 8)
             auto absdiff_p1_p2 = simd_abs_diff_epu8(temp1, temp2); 
-            store(pBuffers[SG_FORWARD]+bufferOffset+x, absdiff_p1_p2);
+            simd_store(pBuffers[SG_FORWARD]+bufferOffset+x, absdiff_p1_p2);
             //////////////////////////////////////////////////////////////////////////
             auto temp3 = calculateSangnom(cur_plus_1, cur, cur_minus_1);
             auto temp4 = calculateSangnom(next_minus_1, next, next_plus_1);
 
             //abs((cur_plus_1*4 + cur*5 - cur_minus_1) / 8  - (next_minus_1*4 + next*5 - next_plus_1) / 8)
             auto absdiff_p3_p4 = simd_abs_diff_epu8(temp3, temp4);
-            store(pBuffers[SG_REVERSE]+bufferOffset+x, absdiff_p3_p4);
+            simd_store(pBuffers[SG_REVERSE]+bufferOffset+x, absdiff_p3_p4);
             //////////////////////////////////////////////////////////////////////////
         }
         pSrc += srcPitch*2;
@@ -345,21 +345,21 @@ void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch, int h
             }
 
             for (int x = 0; x < pitch; x+= 16) {
-                auto cur_minus_6_lo = load_six_to_left<false, simd_load_si128>(pTemp+x*2);
-                auto cur_minus_4_lo = load_four_to_left<false, simd_load_si128>(pTemp+x*2);
-                auto cur_minus_2_lo = load_two_to_left<false, simd_load_si128>(pTemp+x*2);
+                auto cur_minus_6_lo = simd_load_six_to_left<false, simd_load_si128>(pTemp+x*2);
+                auto cur_minus_4_lo = simd_load_four_to_left<false, simd_load_si128>(pTemp+x*2);
+                auto cur_minus_2_lo = simd_load_two_to_left<false, simd_load_si128>(pTemp+x*2);
                 auto cur_lo         = simd_load_si128(pTemp+x*2);
-                auto cur_plus_2_lo  = load_two_to_right<false, simd_load_si128>(pTemp+x*2);
-                auto cur_plus_4_lo  = load_four_to_right<false, simd_load_si128>(pTemp+x*2);
-                auto cur_plus_6_lo  = load_six_to_right<false, simd_load_si128>(pTemp+x*2);
+                auto cur_plus_2_lo  = simd_load_two_to_right<false, simd_load_si128>(pTemp+x*2);
+                auto cur_plus_4_lo  = simd_load_four_to_right<false, simd_load_si128>(pTemp+x*2);
+                auto cur_plus_6_lo  = simd_load_six_to_right<false, simd_load_si128>(pTemp+x*2);
 
-                auto cur_minus_6_hi = load_six_to_left<false, simd_load_si128>(pTemp+x*2+16);
-                auto cur_minus_4_hi = load_four_to_left<false, simd_load_si128>(pTemp+x*2+16);
-                auto cur_minus_2_hi = load_two_to_left<false, simd_load_si128>(pTemp+x*2+16);
+                auto cur_minus_6_hi = simd_load_six_to_left<false, simd_load_si128>(pTemp+x*2+16);
+                auto cur_minus_4_hi = simd_load_four_to_left<false, simd_load_si128>(pTemp+x*2+16);
+                auto cur_minus_2_hi = simd_load_two_to_left<false, simd_load_si128>(pTemp+x*2+16);
                 auto cur_hi         = simd_load_si128(pTemp+x*2+16);
-                auto cur_plus_2_hi  = load_two_to_right<false, simd_load_si128>(pTemp+x*2+16);
-                auto cur_plus_4_hi  = load_four_to_right<false, simd_load_si128>(pTemp+x*2+16);
-                auto cur_plus_6_hi  = load_six_to_right<false, simd_load_si128>(pTemp+x*2+16);
+                auto cur_plus_2_hi  = simd_load_two_to_right<false, simd_load_si128>(pTemp+x*2+16);
+                auto cur_plus_4_hi  = simd_load_four_to_right<false, simd_load_si128>(pTemp+x*2+16);
+                auto cur_plus_6_hi  = simd_load_six_to_right<false, simd_load_si128>(pTemp+x*2+16);
 
                 auto sum_lo = _mm_adds_epu16(cur_minus_6_lo, cur_minus_4_lo);
                 sum_lo = _mm_adds_epu16(sum_lo, cur_minus_2_lo);
@@ -390,7 +390,7 @@ void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch, int h
     }
 }
 
-template<decltype(simd_load_si128) load, decltype(simd_store_si128) store>
+template<decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
 void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch, int bufferPitch, int width, int height, int aa) {
     auto pDstn = pDst + dstPitch;
     auto pSrcn2 = pSrc + srcPitch*2;
@@ -400,31 +400,31 @@ void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], 
 
     for (int y = 0; y < height / 2 - 1; ++y) {
         for (int x = 0; x < width; x += 16) {
-            auto buf0 = load(pBuffers[ADIFF_M3_P3] + bufferOffset + x); 
-            auto buf1 = load(pBuffers[ADIFF_M2_P2] + bufferOffset + x); 
-            auto buf2 = load(pBuffers[ADIFF_M1_P1] + bufferOffset + x); 
-            auto buf3 = load(pBuffers[SG_FORWARD]  + bufferOffset + x); 
-            auto buf4 = load(pBuffers[ADIFF_P0_M0] + bufferOffset + x); 
-            auto buf5 = load(pBuffers[SG_REVERSE]  + bufferOffset + x); 
-            auto buf6 = load(pBuffers[ADIFF_P1_M1] + bufferOffset + x); 
-            auto buf7 = load(pBuffers[ADIFF_P2_M2] + bufferOffset + x); 
-            auto buf8 = load(pBuffers[ADIFF_P3_M3] + bufferOffset + x); 
+            auto buf0 = simd_load(pBuffers[ADIFF_M3_P3] + bufferOffset + x); 
+            auto buf1 = simd_load(pBuffers[ADIFF_M2_P2] + bufferOffset + x); 
+            auto buf2 = simd_load(pBuffers[ADIFF_M1_P1] + bufferOffset + x); 
+            auto buf3 = simd_load(pBuffers[SG_FORWARD]  + bufferOffset + x); 
+            auto buf4 = simd_load(pBuffers[ADIFF_P0_M0] + bufferOffset + x); 
+            auto buf5 = simd_load(pBuffers[SG_REVERSE]  + bufferOffset + x); 
+            auto buf6 = simd_load(pBuffers[ADIFF_P1_M1] + bufferOffset + x); 
+            auto buf7 = simd_load(pBuffers[ADIFF_P2_M2] + bufferOffset + x); 
+            auto buf8 = simd_load(pBuffers[ADIFF_P3_M3] + bufferOffset + x); 
 
-            auto cur_minus_3   = load_three_to_left<false, load>(pSrc+x); 
-            auto cur_minus_2   = load_two_to_left<false, load>(pSrc+x); 
-            auto cur_minus_1   = load_one_to_left<false, load>(pSrc+x); 
-            auto cur           = load(pSrc+x); 
-            auto cur_plus_1    = load_one_to_right<false, load>(pSrc+x); 
-            auto cur_plus_2    = load_two_to_right<false, load>(pSrc+x); 
-            auto cur_plus_3    = load_three_to_right<false, load>(pSrc+x); 
+            auto cur_minus_3   = simd_load_three_to_left<false, simd_load>(pSrc+x); 
+            auto cur_minus_2   = simd_load_two_to_left<false, simd_load>(pSrc+x); 
+            auto cur_minus_1   = simd_load_one_to_left<false, simd_load>(pSrc+x); 
+            auto cur           = simd_load(pSrc+x); 
+            auto cur_plus_1    = simd_load_one_to_right<false, simd_load>(pSrc+x); 
+            auto cur_plus_2    = simd_load_two_to_right<false, simd_load>(pSrc+x); 
+            auto cur_plus_3    = simd_load_three_to_right<false, simd_load>(pSrc+x); 
 
-            auto next_minus_3  = load_three_to_left<false, load>(pSrcn2+x); 
-            auto next_minus_2  = load_two_to_left<false, load>(pSrcn2+x); 
-            auto next_minus_1  = load_one_to_left<false, load>(pSrcn2+x); 
-            auto next          = load(pSrcn2+x); 
-            auto next_plus_1   = load_one_to_right<false, load>(pSrcn2+x); 
-            auto next_plus_2   = load_two_to_right<false, load>(pSrcn2+x); 
-            auto next_plus_3   = load_three_to_right<false, load>(pSrcn2+x); 
+            auto next_minus_3  = simd_load_three_to_left<false, simd_load>(pSrcn2+x); 
+            auto next_minus_2  = simd_load_two_to_left<false, simd_load>(pSrcn2+x); 
+            auto next_minus_1  = simd_load_one_to_left<false, simd_load>(pSrcn2+x); 
+            auto next          = simd_load(pSrcn2+x); 
+            auto next_plus_1   = simd_load_one_to_right<false, simd_load>(pSrcn2+x); 
+            auto next_plus_2   = simd_load_two_to_right<false, simd_load>(pSrcn2+x); 
+            auto next_plus_3   = simd_load_three_to_right<false, simd_load>(pSrcn2+x); 
 
             auto minv = _mm_min_epu8(buf0, buf1);
             minv = _mm_min_epu8(minv, buf2);
@@ -470,7 +470,7 @@ void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], 
             acc = _mm_and_si128(acc, notEqualToMin);
             auto t2 = _mm_andnot_si128(notEqualToMin, avg);
             acc = _mm_or_si128(acc, t2);
-            store(pDstn+x, acc);
+            simd_store(pDstn+x, acc);
         }
         pSrc += srcPitch * 2;
         pSrcn2 += srcPitch * 2;
