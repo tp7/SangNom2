@@ -14,7 +14,7 @@
 
 extern "C" {
 
-    static SG_FORCEINLINE __m128i simd_load_si128(const __m128i* ptr) {
+    SG_FORCEINLINE __m128i simd_load_si128(const __m128i* ptr) {
 #ifdef USE_MOVPS
         return _mm_castps_si128(_mm_load_ps(reinterpret_cast<const float*>(ptr)));
 #else
@@ -22,7 +22,7 @@ extern "C" {
 #endif
     }
 
-    static SG_FORCEINLINE __m128i simd_loadu_si128(const __m128i* ptr) {
+    SG_FORCEINLINE __m128i simd_loadu_si128(const __m128i* ptr) {
 #ifdef USE_MOVPS
         return _mm_castps_si128(_mm_loadu_ps(reinterpret_cast<const float*>(ptr)));
 #else
@@ -30,7 +30,7 @@ extern "C" {
 #endif
     }
 
-    static SG_FORCEINLINE void simd_store_si128(__m128i *ptr, __m128i value) {
+    SG_FORCEINLINE void simd_store_si128(__m128i *ptr, __m128i value) {
 #ifdef USE_MOVPS
         _mm_store_ps(reinterpret_cast<float*>(ptr), _mm_castsi128_ps(value));
 #else
@@ -38,7 +38,7 @@ extern "C" {
 #endif
     }
 
-    static SG_FORCEINLINE void simd_storeu_si128(__m128i *ptr, __m128i value) {
+    SG_FORCEINLINE void simd_storeu_si128(__m128i *ptr, __m128i value) {
 #ifdef USE_MOVPS
         _mm_storeu_ps(reinterpret_cast<float*>(ptr), _mm_castsi128_ps(value));
 #else
@@ -46,6 +46,8 @@ extern "C" {
 #endif
     }
 }
+
+#pragma warning(disable: 4309)
 
 template<bool isBorder, decltype(simd_load_si128) load>
 static SG_FORCEINLINE __m128i load_one_to_left(const BYTE *ptr) {
@@ -110,7 +112,7 @@ static SG_FORCEINLINE __m128i load_six_to_left(const BYTE *ptr) {
     }
 }
 
-//note the difference betwttn set and setr for left and right loading
+//note the difference between set and setr for left and right loading
 template<bool isBorder, decltype(simd_load_si128) load>
 static SG_FORCEINLINE __m128i load_one_to_right(const BYTE *ptr) {
     if (isBorder) {
@@ -174,6 +176,8 @@ static SG_FORCEINLINE __m128i load_six_to_right(const BYTE *ptr) {
     }
 }
 
+#pragma warning(default: 4309)
+
 enum Buffers {
     ADIFF_M3_P3 = 0,
     ADIFF_M2_P2 = 1,
@@ -232,15 +236,16 @@ static __forceinline __m128i calculateSangnom(const __m128i& p1, const __m128i& 
 
 static __forceinline __m128i doSomeWeirdMagic(const __m128i& a1, const __m128i& a2, const __m128i& buf, 
                                               const __m128i& minv, const __m128i& acc, const __m128i& zero) {
-                                                  auto average = _mm_avg_epu8(a1, a2);
-                                                  auto equalToMin = _mm_cmpeq_epi8(buf, minv);
-                                                  auto notEqualToMin = _mm_cmpeq_epi8(equalToMin, zero);
-                                                  auto accNotMin = _mm_and_si128(acc, notEqualToMin);
-                                                  auto idk = _mm_andnot_si128(notEqualToMin, average);
-                                                  return _mm_or_si128(accNotMin, idk);   
+    auto average = _mm_avg_epu8(a1, a2);
+    auto equalToMin = _mm_cmpeq_epi8(buf, minv);
+    auto notEqualToMin = _mm_cmpeq_epi8(equalToMin, zero);
+    auto accNotMin = _mm_and_si128(acc, notEqualToMin);
+    auto idk = _mm_andnot_si128(notEqualToMin, average);
+    return _mm_or_si128(accNotMin, idk);   
 }
 
 
+template<decltype(simd_load_si128) load, decltype(simd_store_si128) store>
 void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, int height, int srcPitch, int bufferPitch) {
     auto pSrcn2 = pSrc + srcPitch*2;
     auto zero = _mm_setzero_si128();
@@ -249,42 +254,42 @@ void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, 
 
     for (int y = 0; y < height / 2 - 1; y++) {
         for (int x = 0; x < width; x += 16) {
-            auto cur_minus_3   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-3)); 
-            auto cur_minus_2   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-2)); 
-            auto cur_minus_1   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-1)); 
-            auto cur           = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x));
-            auto cur_plus_1    = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x+1)); 
-            auto cur_plus_2    = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x+2)); 
-            auto cur_plus_3    = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x+3)); 
+            auto cur_minus_3   = load_three_to_left<false, load>(pSrc+x); 
+            auto cur_minus_2   = load_two_to_left<false, load>(pSrc+x); 
+            auto cur_minus_1   = load_one_to_left<false, load>(pSrc+x); 
+            auto cur           = load(reinterpret_cast<const __m128i*>(pSrc+x));
+            auto cur_plus_1    = load_one_to_right<false, load>(pSrc+x); 
+            auto cur_plus_2    = load_two_to_right<false, load>(pSrc+x); 
+            auto cur_plus_3    = load_three_to_right<false, load>(pSrc+x); 
 
-            auto next_minus_3  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x-3)); 
-            auto next_minus_2  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x-2)); 
-            auto next_minus_1  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x-1)); 
-            auto next          = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x)); 
-            auto next_plus_1   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x+1)); 
-            auto next_plus_2   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x+2)); 
-            auto next_plus_3   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x+3)); 
+            auto next_minus_3  = load_three_to_left<false, load>(pSrcn2+x); 
+            auto next_minus_2  = load_two_to_left<false, load>(pSrcn2+x); 
+            auto next_minus_1  = load_one_to_left<false, load>(pSrcn2+x); 
+            auto next          = load(reinterpret_cast<const __m128i*>(pSrcn2+x)); 
+            auto next_plus_1   = load_one_to_right<false, load>(pSrcn2+x); 
+            auto next_plus_2   = load_two_to_right<false, load>(pSrcn2+x); 
+            auto next_plus_3   = load_three_to_right<false, load>(pSrcn2+x); 
 
             auto adiff_m3_p3 = simd_abs_diff_epu8(cur_minus_3, next_plus_3);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_M3_P3]+bufferOffset+x), adiff_m3_p3);
+            store(reinterpret_cast<__m128i*>(pBuffers[ADIFF_M3_P3]+bufferOffset+x), adiff_m3_p3);
 
             auto adiff_m2_p2 = simd_abs_diff_epu8(cur_minus_2, next_plus_2);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_M2_P2]+bufferOffset+x), adiff_m2_p2);
+            store(reinterpret_cast<__m128i*>(pBuffers[ADIFF_M2_P2]+bufferOffset+x), adiff_m2_p2);
 
             auto adiff_m1_p1 = simd_abs_diff_epu8(cur_minus_1, next_plus_1);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_M1_P1]+bufferOffset+x), adiff_m1_p1);
+            store(reinterpret_cast<__m128i*>(pBuffers[ADIFF_M1_P1]+bufferOffset+x), adiff_m1_p1);
 
             auto adiff_0     = simd_abs_diff_epu8(cur, next);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P0_M0]+bufferOffset+x), adiff_0);
+            store(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P0_M0]+bufferOffset+x), adiff_0);
 
             auto adiff_p1_m1 = simd_abs_diff_epu8(cur_plus_1, next_minus_1);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P1_M1]+bufferOffset+x), adiff_p1_m1);
+            store(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P1_M1]+bufferOffset+x), adiff_p1_m1);
 
             auto adiff_p2_m2 = simd_abs_diff_epu8(cur_plus_2, next_minus_2);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P2_M2]+bufferOffset+x), adiff_p2_m2);
+            store(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P2_M2]+bufferOffset+x), adiff_p2_m2);
 
             auto adiff_p3_m3 = simd_abs_diff_epu8(cur_plus_3, next_minus_3);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P3_M3]+bufferOffset+x), adiff_p3_m3);
+            store(reinterpret_cast<__m128i*>(pBuffers[ADIFF_P3_M3]+bufferOffset+x), adiff_p3_m3);
 
             //////////////////////////////////////////////////////////////////////////
             auto temp1 = calculateSangnom(cur_minus_1, cur, cur_plus_1);
@@ -292,14 +297,14 @@ void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, 
 
             //abs((cur_minus_1*4 + cur*5 - cur_plus_1) / 8  - (next_plus_1*4 + next*5 - next_minus_1) / 8)
             auto absdiff_p1_p2 = simd_abs_diff_epu8(temp1, temp2); 
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[SG_FORWARD]+bufferOffset+x), absdiff_p1_p2);
+            store(reinterpret_cast<__m128i*>(pBuffers[SG_FORWARD]+bufferOffset+x), absdiff_p1_p2);
             //////////////////////////////////////////////////////////////////////////
             auto temp3 = calculateSangnom(cur_plus_1, cur, cur_minus_1);
             auto temp4 = calculateSangnom(next_minus_1, next, next_plus_1);
 
             //abs((cur_plus_1*4 + cur*5 - cur_minus_1) / 8  - (next_minus_1*4 + next*5 - next_plus_1) / 8)
             auto absdiff_p3_p4 = simd_abs_diff_epu8(temp3, temp4);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pBuffers[SG_REVERSE]+bufferOffset+x), absdiff_p3_p4);
+            store(reinterpret_cast<__m128i*>(pBuffers[SG_REVERSE]+bufferOffset+x), absdiff_p3_p4);
             //////////////////////////////////////////////////////////////////////////
         }
         pSrc += srcPitch*2;
@@ -340,21 +345,21 @@ void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch, int h
             }
 
             for (int x = 0; x < pitch; x+= 16) {
-                auto cur_minus_6_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-6));
-                auto cur_minus_4_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-4));
-                auto cur_minus_2_lo = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-2));
+                auto cur_minus_6_lo = load_six_to_left<false, simd_load_si128>(pTemp+x*2);
+                auto cur_minus_4_lo = load_four_to_left<false, simd_load_si128>(pTemp+x*2);
+                auto cur_minus_2_lo = load_two_to_left<false, simd_load_si128>(pTemp+x*2);
                 auto cur_lo         = simd_load_si128(reinterpret_cast<const __m128i*>(pTemp+x*2));
-                auto cur_plus_2_lo  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+2));
-                auto cur_plus_4_lo  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+4));
-                auto cur_plus_6_lo  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+6));
+                auto cur_plus_2_lo  = load_two_to_right<false, simd_load_si128>(pTemp+x*2);
+                auto cur_plus_4_lo  = load_four_to_right<false, simd_load_si128>(pTemp+x*2);
+                auto cur_plus_6_lo  = load_six_to_right<false, simd_load_si128>(pTemp+x*2);
 
-                auto cur_minus_6_hi = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-6+16));
-                auto cur_minus_4_hi = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-4+16));
-                auto cur_minus_2_hi = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2-2+16));
+                auto cur_minus_6_hi = load_six_to_left<false, simd_load_si128>(pTemp+x*2+16);
+                auto cur_minus_4_hi = load_four_to_left<false, simd_load_si128>(pTemp+x*2+16);
+                auto cur_minus_2_hi = load_two_to_left<false, simd_load_si128>(pTemp+x*2+16);
                 auto cur_hi         = simd_load_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+16));
-                auto cur_plus_2_hi  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+2+16));
-                auto cur_plus_4_hi  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+4+16));
-                auto cur_plus_6_hi  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pTemp+x*2+6+16));
+                auto cur_plus_2_hi  = load_two_to_right<false, simd_load_si128>(pTemp+x*2+16);
+                auto cur_plus_4_hi  = load_four_to_right<false, simd_load_si128>(pTemp+x*2+16);
+                auto cur_plus_6_hi  = load_six_to_right<false, simd_load_si128>(pTemp+x*2+16);
 
                 auto sum_lo = _mm_adds_epu16(cur_minus_6_lo, cur_minus_4_lo);
                 sum_lo = _mm_adds_epu16(sum_lo, cur_minus_2_lo);
@@ -385,6 +390,7 @@ void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch, int h
     }
 }
 
+template<decltype(simd_load_si128) load, decltype(simd_store_si128) store>
 void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch, int bufferPitch, int width, int height, int aa) {
     auto pDstn = pDst + dstPitch;
     auto pSrcn2 = pSrc + srcPitch*2;
@@ -394,31 +400,31 @@ void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], 
 
     for (int y = 0; y < height / 2 - 1; ++y) {
         for (int x = 0; x < width; x += 16) {
-            auto buf0 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_M3_P3] + bufferOffset + x)); 
-            auto buf1 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_M2_P2] + bufferOffset + x)); 
-            auto buf2 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_M1_P1] + bufferOffset + x)); 
-            auto buf3 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[SG_FORWARD]  + bufferOffset + x)); 
-            auto buf4 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P0_M0] + bufferOffset + x)); 
-            auto buf5 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[SG_REVERSE]  + bufferOffset + x)); 
-            auto buf6 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P1_M1] + bufferOffset + x)); 
-            auto buf7 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P2_M2] + bufferOffset + x)); 
-            auto buf8 = simd_loadu_si128(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P3_M3] + bufferOffset + x)); 
+            auto buf0 = load(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_M3_P3] + bufferOffset + x)); 
+            auto buf1 = load(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_M2_P2] + bufferOffset + x)); 
+            auto buf2 = load(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_M1_P1] + bufferOffset + x)); 
+            auto buf3 = load(reinterpret_cast<const __m128i*>(pBuffers[SG_FORWARD]  + bufferOffset + x)); 
+            auto buf4 = load(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P0_M0] + bufferOffset + x)); 
+            auto buf5 = load(reinterpret_cast<const __m128i*>(pBuffers[SG_REVERSE]  + bufferOffset + x)); 
+            auto buf6 = load(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P1_M1] + bufferOffset + x)); 
+            auto buf7 = load(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P2_M2] + bufferOffset + x)); 
+            auto buf8 = load(reinterpret_cast<const __m128i*>(pBuffers[ADIFF_P3_M3] + bufferOffset + x)); 
 
-            auto cur_minus_3   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-3)); 
-            auto cur_minus_2   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-2)); 
-            auto cur_minus_1   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x-1)); 
-            auto cur           = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x)); 
-            auto cur_plus_1    = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x+1)); 
-            auto cur_plus_2    = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x+2)); 
-            auto cur_plus_3    = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrc+x+3)); 
+            auto cur_minus_3   = load_three_to_left<false, load>(pSrc+x); 
+            auto cur_minus_2   = load_two_to_left<false, load>(pSrc+x); 
+            auto cur_minus_1   = load_one_to_left<false, load>(pSrc+x); 
+            auto cur           = load(reinterpret_cast<const __m128i*>(pSrc+x)); 
+            auto cur_plus_1    = load_one_to_right<false, load>(pSrc+x); 
+            auto cur_plus_2    = load_two_to_right<false, load>(pSrc+x); 
+            auto cur_plus_3    = load_three_to_right<false, load>(pSrc+x); 
 
-            auto next_minus_3  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x-3)); 
-            auto next_minus_2  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x-2)); 
-            auto next_minus_1  = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x-1)); 
-            auto next          = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x)); 
-            auto next_plus_1   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x+1)); 
-            auto next_plus_2   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x+2)); 
-            auto next_plus_3   = simd_loadu_si128(reinterpret_cast<const __m128i*>(pSrcn2+x+3)); 
+            auto next_minus_3  = load_three_to_left<false, load>(pSrcn2+x); 
+            auto next_minus_2  = load_two_to_left<false, load>(pSrcn2+x); 
+            auto next_minus_1  = load_one_to_left<false, load>(pSrcn2+x); 
+            auto next          = load(reinterpret_cast<const __m128i*>(pSrcn2+x)); 
+            auto next_plus_1   = load_one_to_right<false, load>(pSrcn2+x); 
+            auto next_plus_2   = load_two_to_right<false, load>(pSrcn2+x); 
+            auto next_plus_3   = load_three_to_right<false, load>(pSrcn2+x); 
 
             auto minv = _mm_min_epu8(buf0, buf1);
             minv = _mm_min_epu8(minv, buf2);
@@ -464,7 +470,7 @@ void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], 
             acc = _mm_and_si128(acc, notEqualToMin);
             auto t2 = _mm_andnot_si128(notEqualToMin, avg);
             acc = _mm_or_si128(acc, t2);
-            simd_storeu_si128(reinterpret_cast<__m128i*>(pDstn+x), acc);
+            store(reinterpret_cast<__m128i*>(pDstn+x), acc);
         }
         pSrc += srcPitch * 2;
         pSrcn2 += srcPitch * 2;
@@ -531,9 +537,9 @@ void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDs
         env->BitBlt(pDst+dstPitch * (height-1), dstPitch, pSrc + srcPitch*(height-2), srcPitch, width,1);
     }
 
-    prepareBuffers(pSrc + offset_*srcPitch, buffers_, width, height, srcPitch, bufferPitch_);
+    prepareBuffers<simd_loadu_si128, simd_storeu_si128>(pSrc + offset_*srcPitch, buffers_, width, height, srcPitch, bufferPitch_);
     processBuffers(buffers_, intermediate_, bufferPitch_, bufferHeight_);
-    finalizePlane(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa_);
+    finalizePlane<simd_loadu_si128, simd_storeu_si128>(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa_);
 }
 
 
