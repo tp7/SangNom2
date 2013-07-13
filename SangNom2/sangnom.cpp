@@ -612,7 +612,7 @@ SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
         bufferPitch_ = (vi.width + 15) / 16 * 16;
         bufferHeight_ = (vi.height + 1) / 2;
         for (int i = 0; i < 9; i++) {
-            buffers_[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_ * bufferHeight_, 16));
+            buffers_[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_ * (bufferHeight_+1), 16));
             memset(buffers_[i], 0, bufferPitch_); //this is important... I think
         }
         intermediate_ = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_*2, 16));
