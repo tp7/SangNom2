@@ -559,6 +559,10 @@ static void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_C
     }
 }
 
+inline bool is16byteAligned(const void *ptr) {
+    return (((unsigned long)ptr) & 15) == 0;
+}
+
 auto prepareBuffers_sse2 = &prepareBuffers<simd_loadu_si128>;
 auto prepareBuffers_asse2 = &prepareBuffers<simd_load_si128>;
 auto finalizePlane_sse2 = &finalizePlane<simd_loadu_si128, simd_storeu_si128>;
@@ -622,15 +626,22 @@ void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDs
         env->BitBlt(pDst+dstPitch * (height-1), dstPitch, pSrc + srcPitch*(height-2), srcPitch, width,1);
     }
 
-    prepareBuffers_sse2(pSrc + offset_*srcPitch, buffers_, width, height, srcPitch, bufferPitch_);
+    auto prepareBuffers_op = prepareBuffers_sse2;
+    auto finalizePlane_op = finalizePlane_sse2;
+    if (is16byteAligned(pSrc)) {
+        prepareBuffers_op = prepareBuffers_asse2;
+        finalizePlane_op = finalizePlane_asse2;
+    }
+
+    prepareBuffers_op(pSrc + offset_*srcPitch, buffers_, width, height, srcPitch, bufferPitch_);
     processBuffers(buffers_, intermediate_, bufferPitch_, bufferHeight_);
-    finalizePlane_sse2(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa_);
+    finalizePlane_op(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa_);
 }
 
 
 PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
     auto srcFrame = child->GetFrame(n, env);
-    auto dstFrame = env->NewVideoFrame(vi);
+    auto dstFrame = env->NewVideoFrame(vi, 16);
 
     offset_ = order_ == 0 
         ? child->GetParity(n) ? 0 : 1
