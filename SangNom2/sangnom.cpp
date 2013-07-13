@@ -288,10 +288,9 @@ static SG_FORCEINLINE __m128i doSomeWeirdMagic(const __m128i& a1, const __m128i&
                                               const __m128i& minv, const __m128i& acc, const __m128i& zero) {
     auto average = _mm_avg_epu8(a1, a2);
     auto equalToMin = _mm_cmpeq_epi8(buf, minv);
-    auto notEqualToMin = _mm_cmpeq_epi8(equalToMin, zero);
-    auto accNotMin = _mm_and_si128(acc, notEqualToMin);
-    auto idk = _mm_andnot_si128(notEqualToMin, average);
-    return _mm_or_si128(accNotMin, idk);   
+    auto accNotMin = _mm_andnot_si128(equalToMin, acc);
+    auto avgEqualToMin = _mm_and_si128(equalToMin, average);
+    return _mm_or_si128(accNotMin, avgEqualToMin);   
 }
 
 template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
@@ -576,7 +575,7 @@ public:
     PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
     ~SangNom2() {
-        for (int i = 0; i < 9; i++) {
+        for (int i = 0; i < BUFFERS_COUNT; i++) {
             _mm_free(buffers_[i]);
         }
         _mm_free(intermediate_);
@@ -587,7 +586,7 @@ private:
     int offset_;
     int aa_;
 
-    BYTE *buffers_[9];
+    BYTE *buffers_[BUFFERS_COUNT];
     int bufferPitch_;
     int bufferHeight_;
     BYTE *intermediate_;
@@ -611,7 +610,7 @@ SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
 
         bufferPitch_ = (vi.width + 15) / 16 * 16;
         bufferHeight_ = (vi.height + 1) / 2;
-        for (int i = 0; i < 9; i++) {
+        for (int i = 0; i < BUFFERS_COUNT; i++) {
             buffers_[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_ * (bufferHeight_+1), 16));
             memset(buffers_[i], 0, bufferPitch_); //this is important... I think
         }
@@ -654,11 +653,13 @@ PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
     processPlane(env, srcFrame->GetReadPtr(PLANAR_Y), dstFrame->GetWritePtr(PLANAR_Y), srcFrame->GetRowSize(PLANAR_Y), 
         srcFrame->GetHeight(PLANAR_Y), srcFrame->GetPitch(PLANAR_Y), srcFrame->GetPitch(PLANAR_Y));
 
-    processPlane(env, srcFrame->GetReadPtr(PLANAR_U), dstFrame->GetWritePtr(PLANAR_U), srcFrame->GetRowSize(PLANAR_U), 
-        srcFrame->GetHeight(PLANAR_U), srcFrame->GetPitch(PLANAR_U), srcFrame->GetPitch(PLANAR_U));
+    if (!vi.IsY8()) {
+        processPlane(env, srcFrame->GetReadPtr(PLANAR_U), dstFrame->GetWritePtr(PLANAR_U), srcFrame->GetRowSize(PLANAR_U), 
+            srcFrame->GetHeight(PLANAR_U), srcFrame->GetPitch(PLANAR_U), srcFrame->GetPitch(PLANAR_U));
 
-    processPlane(env, srcFrame->GetReadPtr(PLANAR_V), dstFrame->GetWritePtr(PLANAR_V), srcFrame->GetRowSize(PLANAR_V), 
-        srcFrame->GetHeight(PLANAR_V), srcFrame->GetPitch(PLANAR_V), srcFrame->GetPitch(PLANAR_V));
+        processPlane(env, srcFrame->GetReadPtr(PLANAR_V), dstFrame->GetWritePtr(PLANAR_V), srcFrame->GetRowSize(PLANAR_V), 
+            srcFrame->GetHeight(PLANAR_V), srcFrame->GetPitch(PLANAR_V), srcFrame->GetPitch(PLANAR_V));
+    }
 
     return dstFrame;
 }
