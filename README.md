@@ -2,7 +2,7 @@
 
 Reimplementation of the old MarcFD's SangNom filter. Output is not completely but mostly identical.
 
-### What's difference ###
+### What's different ###
 * It's open source
 * Correct borders processing
 * Additinal colorspace support
