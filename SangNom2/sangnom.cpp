@@ -593,7 +593,7 @@ private:
     int bufferHeight_;
     BYTE *intermediate_;
 
-    void processPlane(IScriptEnvironment* env, const BYTE* srcp, BYTE* dstp, int width, int height, int src_pitch, int dst_pitch);
+    void processPlane(IScriptEnvironment* env, const BYTE* srcp, BYTE* dstp, int width, int height, int src_pitch, int dst_pitch, int aa);
 };
 
 SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
@@ -622,7 +622,7 @@ SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
         aa_ = (21 * aa) / 16;
 }
 
-void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch) {
+void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch, int aa) {
     env->BitBlt(pDst + offset_ * dstPitch, dstPitch * 2, pSrc + offset_ * srcPitch, srcPitch * 2, width, height / 2);
     
     if (offset_ == 1) {
@@ -640,7 +640,7 @@ void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDs
 
     prepareBuffers_op(pSrc + offset_*srcPitch, buffers_, width, height, srcPitch, bufferPitch_);
     processBuffers(buffers_, intermediate_, bufferPitch_, bufferHeight_);
-    finalizePlane_op(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa_);
+    finalizePlane_op(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa);
 }
 
 
@@ -653,14 +653,14 @@ PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
         : order_ == 1 ? 0 : 1;
 
     processPlane(env, srcFrame->GetReadPtr(PLANAR_Y), dstFrame->GetWritePtr(PLANAR_Y), srcFrame->GetRowSize(PLANAR_Y), 
-        srcFrame->GetHeight(PLANAR_Y), srcFrame->GetPitch(PLANAR_Y), srcFrame->GetPitch(PLANAR_Y));
+        srcFrame->GetHeight(PLANAR_Y), srcFrame->GetPitch(PLANAR_Y), srcFrame->GetPitch(PLANAR_Y), aa_);
 
     if (!vi.IsY8()) {
         processPlane(env, srcFrame->GetReadPtr(PLANAR_U), dstFrame->GetWritePtr(PLANAR_U), srcFrame->GetRowSize(PLANAR_U), 
-            srcFrame->GetHeight(PLANAR_U), srcFrame->GetPitch(PLANAR_U), srcFrame->GetPitch(PLANAR_U));
+            srcFrame->GetHeight(PLANAR_U), srcFrame->GetPitch(PLANAR_U), srcFrame->GetPitch(PLANAR_U), 0);
 
         processPlane(env, srcFrame->GetReadPtr(PLANAR_V), dstFrame->GetWritePtr(PLANAR_V), srcFrame->GetRowSize(PLANAR_V), 
-            srcFrame->GetHeight(PLANAR_V), srcFrame->GetPitch(PLANAR_V), srcFrame->GetPitch(PLANAR_V));
+            srcFrame->GetHeight(PLANAR_V), srcFrame->GetPitch(PLANAR_V), srcFrame->GetPitch(PLANAR_V), 0);
     }
 
     return dstFrame;
