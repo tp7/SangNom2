@@ -459,7 +459,7 @@ static void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch
 }
 
 template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_load_si128) simd_load_buffer, decltype(simd_store_si128) simd_store>
-static SG_FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn2, BYTE* pDstn, BYTE* pBuffers[BUFFERS_COUNT], int bufferOffset, int width, const __m128i& aav) {
+static SG_FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn2, BYTE* pDstn, BYTE* pBuffers[BUFFERS_COUNT], int bufferOffset, int width, const __m128i& aath) {
     auto zero = _mm_setzero_si128();
     for (int x = 0; x < width; x += 16) {
         auto buf0 = simd_load_buffer(pBuffers[ADIFF_M3_P3] + bufferOffset + x); 
@@ -522,17 +522,19 @@ static SG_FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn
 
         auto avg = _mm_avg_epu8(cur, next);
 
-        auto equalToMin = _mm_cmpeq_epi8(buf4, minv);
-        auto notEqualToMin = _mm_cmpeq_epi8(equalToMin, zero);
-
-        auto idk = _mm_subs_epu8(minv, aav);
+        auto buf4EqualToMin = _mm_cmpeq_epi8(buf4, minv);
+        
+        auto idk = _mm_subs_epu8(minv, aath);
+        //this isn't strictly negation, don't optimize
         idk = _mm_cmpeq_epi8(idk, zero);
-        notEqualToMin = _mm_and_si128(notEqualToMin, idk);
+        auto mask = _mm_andnot_si128(buf4EqualToMin, idk);
 
-        acc = _mm_and_si128(acc, notEqualToMin);
-        auto t2 = _mm_andnot_si128(notEqualToMin, avg);
-        acc = _mm_or_si128(acc, t2);
-        simd_store(pDstn+x, acc);
+        //blending
+        acc = _mm_and_si128(acc, mask);
+        avg = _mm_andnot_si128(mask, avg);
+        auto result = _mm_or_si128(acc, avg);
+
+        simd_store(pDstn+x, result);
     }
 }
 
