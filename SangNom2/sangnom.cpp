@@ -284,13 +284,15 @@ static SG_FORCEINLINE __m128i calculateSangnom(const __m128i& p1, const __m128i&
 }
 
 
-static SG_FORCEINLINE __m128i doSomeWeirdMagic(const __m128i& a1, const __m128i& a2, const __m128i& buf, 
+static SG_FORCEINLINE __m128i blendAvgOnMinimalBuffer(const __m128i& a1, const __m128i& a2, const __m128i& buf, 
                                               const __m128i& minv, const __m128i& acc, const __m128i& zero) {
     auto average = _mm_avg_epu8(a1, a2);
-    auto equalToMin = _mm_cmpeq_epi8(buf, minv);
-    auto accNotMin = _mm_andnot_si128(equalToMin, acc);
-    auto avgEqualToMin = _mm_and_si128(equalToMin, average);
-    return _mm_or_si128(accNotMin, avgEqualToMin);   
+    //buffer is minimal
+    auto mask = _mm_cmpeq_epi8(buf, minv);
+    //blend
+    auto avgPart = _mm_and_si128(mask, average);
+    auto accPart = _mm_andnot_si128(mask, acc);
+    return _mm_or_si128(avgPart, accPart);   
 }
 
 template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
@@ -488,51 +490,51 @@ static SG_FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn
         auto next_plus_2   = simd_load_two_to_right<border == BorderMode::RIGHT, simd_load>(pSrcn2+x); 
         auto next_plus_3   = simd_load_three_to_right<border == BorderMode::RIGHT, simd_load>(pSrcn2+x); 
 
-        auto minv = _mm_min_epu8(buf0, buf1);
-        minv = _mm_min_epu8(minv, buf2);
-        minv = _mm_min_epu8(minv, buf3);
-        minv = _mm_min_epu8(minv, buf4);
-        minv = _mm_min_epu8(minv, buf5);
-        minv = _mm_min_epu8(minv, buf6);
-        minv = _mm_min_epu8(minv, buf7);
-        minv = _mm_min_epu8(minv, buf8);
+        auto minbuf = _mm_min_epu8(buf0, buf1);
+        minbuf = _mm_min_epu8(minbuf, buf2);
+        minbuf = _mm_min_epu8(minbuf, buf3);
+        minbuf = _mm_min_epu8(minbuf, buf4);
+        minbuf = _mm_min_epu8(minbuf, buf5);
+        minbuf = _mm_min_epu8(minbuf, buf6);
+        minbuf = _mm_min_epu8(minbuf, buf7);
+        minbuf = _mm_min_epu8(minbuf, buf8);
 
-        auto acc = _mm_setzero_si128();
+        auto processed = _mm_setzero_si128();
 
-        acc = doSomeWeirdMagic(cur_minus_3, next_plus_3, buf0, minv, acc, zero);
-        acc = doSomeWeirdMagic(cur_plus_3, next_minus_3, buf8, minv, acc, zero);
+        processed = blendAvgOnMinimalBuffer(cur_minus_3, next_plus_3, buf0, minbuf, processed, zero);
+        processed = blendAvgOnMinimalBuffer(cur_plus_3, next_minus_3, buf8, minbuf, processed, zero);
 
-        acc = doSomeWeirdMagic(cur_minus_2, next_plus_2, buf1, minv, acc, zero);
-        acc = doSomeWeirdMagic(cur_plus_2, next_minus_2, buf7, minv, acc, zero);
+        processed = blendAvgOnMinimalBuffer(cur_minus_2, next_plus_2, buf1, minbuf, processed, zero);
+        processed = blendAvgOnMinimalBuffer(cur_plus_2, next_minus_2, buf7, minbuf, processed, zero);
 
-        acc = doSomeWeirdMagic(cur_minus_1, next_plus_1, buf2, minv, acc, zero);
-        acc = doSomeWeirdMagic(cur_plus_1, next_minus_1, buf6, minv, acc, zero);
+        processed = blendAvgOnMinimalBuffer(cur_minus_1, next_plus_1, buf2, minbuf, processed, zero);
+        processed = blendAvgOnMinimalBuffer(cur_plus_1, next_minus_1, buf6, minbuf, processed, zero);
 
         ////////////////////////////////////////////////////////////////////////////
         auto temp1 = calculateSangnom(cur_minus_1, cur, cur_plus_1);
         auto temp2 = calculateSangnom(next_plus_1, next, next_minus_1);
 
-        acc = doSomeWeirdMagic(temp1, temp2, buf3, minv, acc, zero);
+        processed = blendAvgOnMinimalBuffer(temp1, temp2, buf3, minbuf, processed, zero);
         ////////////////////////////////////////////////////////////////////////////
         auto temp3 = calculateSangnom(cur_plus_1, cur, cur_minus_1);
         auto temp4 = calculateSangnom(next_minus_1, next, next_plus_1);
 
-        acc = doSomeWeirdMagic(temp3, temp4, buf5, minv, acc, zero);
+        processed = blendAvgOnMinimalBuffer(temp3, temp4, buf5, minbuf, processed, zero);
         ////////////////////////////////////////////////////////////////////////////
 
-        auto avg = _mm_avg_epu8(cur, next);
+        auto average = _mm_avg_epu8(cur, next);
 
-        auto buf4EqualToMin = _mm_cmpeq_epi8(buf4, minv);
+        auto buf4IsMinimal = _mm_cmpeq_epi8(buf4, minbuf);
         
-        auto idk = _mm_subs_epu8(minv, aath);
+        auto takeAaa = _mm_subs_epu8(minbuf, aath);
         //this isn't strictly negation, don't optimize
-        idk = _mm_cmpeq_epi8(idk, zero);
-        auto mask = _mm_andnot_si128(buf4EqualToMin, idk);
+        auto takeProcessed = _mm_cmpeq_epi8(takeAaa, zero);
+        auto mask = _mm_andnot_si128(buf4IsMinimal, takeProcessed);
 
         //blending
-        acc = _mm_and_si128(acc, mask);
-        avg = _mm_andnot_si128(mask, avg);
-        auto result = _mm_or_si128(acc, avg);
+        processed = _mm_and_si128(mask, processed);
+        average = _mm_andnot_si128(mask, average);
+        auto result = _mm_or_si128(processed, average);
 
         simd_store(pDstn+x, result);
     }
