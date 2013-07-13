@@ -295,7 +295,7 @@ static SG_FORCEINLINE __m128i doSomeWeirdMagic(const __m128i& a1, const __m128i&
 }
 
 template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
-static FORCEINLINE void prepareBuffersLine(const BYTE* pSrc, const BYTE *pSrcn2, BYTE* pBuffers[BUFFERS_COUNT], int bufferOffset, int width) {
+static SG_FORCEINLINE void prepareBuffersLine(const BYTE* pSrc, const BYTE *pSrcn2, BYTE* pBuffers[BUFFERS_COUNT], int bufferOffset, int width) {
     for (int x = 0; x < width; x += 16) {
         auto cur_minus_3   = simd_load_three_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
         auto cur_minus_2   = simd_load_two_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
@@ -353,18 +353,18 @@ static FORCEINLINE void prepareBuffersLine(const BYTE* pSrc, const BYTE *pSrcn2,
 }
 
 
-template<decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
+template<decltype(simd_load_si128) simd_load>
 static void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, int height, int srcPitch, int bufferPitch) {
     auto pSrcn2 = pSrc + srcPitch*2;
 
-    int bufferOffset = width;
+    int bufferOffset = bufferPitch;
     int sse2Width = (width - 1 - 16) / 16 * 16 + 16;
 
     for (int y = 0; y < height / 2 - 1; y++) {
-        prepareBuffersLine<BorderMode::LEFT, simd_load, simd_store>(pSrc, pSrcn2, pBuffers, bufferOffset, 16);
+        prepareBuffersLine<BorderMode::LEFT, simd_load, simd_store_si128>(pSrc, pSrcn2, pBuffers, bufferOffset, 16);
 
-        prepareBuffersLine<BorderMode::NONE, simd_load, simd_store>(pSrc + 16, pSrcn2+16, pBuffers, bufferOffset+16, sse2Width - 16);
-        /* right */
+        prepareBuffersLine<BorderMode::NONE, simd_load, simd_store_si128>(pSrc + 16, pSrcn2+16, pBuffers, bufferOffset+16, sse2Width - 16);
+        
         prepareBuffersLine<BorderMode::RIGHT, simd_loadu_si128, simd_storeu_si128>(pSrc + width - 16, pSrcn2 + width - 16, pBuffers, bufferOffset + width - 16, 16);
       
         pSrc += srcPitch*2;
@@ -459,19 +459,19 @@ static void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch
     }
 }
 
-template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
-static FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn2, BYTE* pDstn, BYTE* pBuffers[BUFFERS_COUNT], int bufferOffset, int width, const __m128i& aav) {
+template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_load_si128) simd_load_buffer, decltype(simd_store_si128) simd_store>
+static SG_FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn2, BYTE* pDstn, BYTE* pBuffers[BUFFERS_COUNT], int bufferOffset, int width, const __m128i& aav) {
     auto zero = _mm_setzero_si128();
     for (int x = 0; x < width; x += 16) {
-        auto buf0 = simd_load(pBuffers[ADIFF_M3_P3] + bufferOffset + x); 
-        auto buf1 = simd_load(pBuffers[ADIFF_M2_P2] + bufferOffset + x); 
-        auto buf2 = simd_load(pBuffers[ADIFF_M1_P1] + bufferOffset + x); 
-        auto buf3 = simd_load(pBuffers[SG_FORWARD]  + bufferOffset + x); 
-        auto buf4 = simd_load(pBuffers[ADIFF_P0_M0] + bufferOffset + x); 
-        auto buf5 = simd_load(pBuffers[SG_REVERSE]  + bufferOffset + x); 
-        auto buf6 = simd_load(pBuffers[ADIFF_P1_M1] + bufferOffset + x); 
-        auto buf7 = simd_load(pBuffers[ADIFF_P2_M2] + bufferOffset + x); 
-        auto buf8 = simd_load(pBuffers[ADIFF_P3_M3] + bufferOffset + x); 
+        auto buf0 = simd_load_buffer(pBuffers[ADIFF_M3_P3] + bufferOffset + x); 
+        auto buf1 = simd_load_buffer(pBuffers[ADIFF_M2_P2] + bufferOffset + x); 
+        auto buf2 = simd_load_buffer(pBuffers[ADIFF_M1_P1] + bufferOffset + x); 
+        auto buf3 = simd_load_buffer(pBuffers[SG_FORWARD]  + bufferOffset + x); 
+        auto buf4 = simd_load_buffer(pBuffers[ADIFF_P0_M0] + bufferOffset + x); 
+        auto buf5 = simd_load_buffer(pBuffers[SG_REVERSE]  + bufferOffset + x); 
+        auto buf6 = simd_load_buffer(pBuffers[ADIFF_P1_M1] + bufferOffset + x); 
+        auto buf7 = simd_load_buffer(pBuffers[ADIFF_P2_M2] + bufferOffset + x); 
+        auto buf8 = simd_load_buffer(pBuffers[ADIFF_P3_M3] + bufferOffset + x); 
 
         auto cur_minus_3   = simd_load_three_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
         auto cur_minus_2   = simd_load_two_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
@@ -546,11 +546,11 @@ static void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_C
     int sse2Width = (width - 1 - 16) / 16 * 16 + 16;
 
     for (int y = 0; y < height / 2 - 1; ++y) {
-        finalizePlaneLine<BorderMode::LEFT, simd_load, simd_store>(pSrc, pSrcn2, pDstn, pBuffers, bufferOffset, 16, aav);
+        finalizePlaneLine<BorderMode::LEFT, simd_load, simd_load_si128, simd_store>(pSrc, pSrcn2, pDstn, pBuffers, bufferOffset, 16, aav);
 
-        finalizePlaneLine<BorderMode::NONE, simd_load, simd_store>(pSrc + 16, pSrcn2+16, pDstn+16, pBuffers, bufferOffset+16, sse2Width - 16, aav);
+        finalizePlaneLine<BorderMode::NONE, simd_load, simd_load_si128, simd_store>(pSrc + 16, pSrcn2+16, pDstn+16, pBuffers, bufferOffset+16, sse2Width - 16, aav);
 
-        finalizePlaneLine<BorderMode::RIGHT, simd_loadu_si128, simd_storeu_si128>(pSrc + width - 16, pSrcn2 + width - 16, pDstn + width - 16, pBuffers, bufferOffset + width - 16, 16, aav);
+        finalizePlaneLine<BorderMode::RIGHT, simd_loadu_si128, simd_loadu_si128, simd_storeu_si128>(pSrc + width - 16, pSrcn2 + width - 16, pDstn + width - 16, pBuffers, bufferOffset + width - 16, 16, aav);
 
         pSrc += srcPitch * 2;
         pSrcn2 += srcPitch * 2;
@@ -558,6 +558,11 @@ static void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_C
         bufferOffset += bufferPitch;
     }
 }
+
+auto prepareBuffers_sse2 = &prepareBuffers<simd_loadu_si128>;
+auto prepareBuffers_asse2 = &prepareBuffers<simd_load_si128>;
+auto finalizePlane_sse2 = &finalizePlane<simd_loadu_si128, simd_storeu_si128>;
+auto finalizePlane_asse2 = &finalizePlane<simd_load_si128, simd_store_si128>;
 
 
 class SangNom2 : public GenericVideoFilter {
@@ -600,7 +605,7 @@ SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
         bufferHeight_ = (vi.height + 1) / 2;
         for (int i = 0; i < 9; i++) {
             buffers_[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_ * bufferHeight_, 16));
-            memset(buffers_[i], 0,bufferPitch_ * bufferHeight_); //this is important
+            memset(buffers_[i], 0, bufferPitch_ * bufferHeight_); //this is important
         }
         intermediate_ = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_*2, 16));
         
@@ -617,9 +622,9 @@ void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDs
         env->BitBlt(pDst+dstPitch * (height-1), dstPitch, pSrc + srcPitch*(height-2), srcPitch, width,1);
     }
 
-    prepareBuffers<simd_loadu_si128, simd_storeu_si128>(pSrc + offset_*srcPitch, buffers_, width, height, srcPitch, bufferPitch_);
+    prepareBuffers_sse2(pSrc + offset_*srcPitch, buffers_, width, height, srcPitch, bufferPitch_);
     processBuffers(buffers_, intermediate_, bufferPitch_, bufferHeight_);
-    finalizePlane<simd_loadu_si128, simd_storeu_si128>(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa_);
+    finalizePlane_sse2(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa_);
 }
 
 
