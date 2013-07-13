@@ -605,6 +605,10 @@ SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
             env->ThrowError("Sorry, SSE2 is requried");
         }
 
+        if (vi.width < 16) {
+            env->ThrowError("Sorry, wight must be bigger or equal to 16");
+        }
+
         bufferPitch_ = (vi.width + 15) / 16 * 16;
         bufferHeight_ = (vi.height + 1) / 2;
         for (int i = 0; i < 9; i++) {
