@@ -54,7 +54,9 @@ static SG_FORCEINLINE __m128i simd_load_one_to_left(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
-        return _mm_or_si128(_mm_slli_si128(val, 1), _mm_and_si128(val, mask));
+        auto shifted = _mm_slli_si128(val, 1);
+        auto andm = _mm_and_si128(val, mask);
+        return _mm_or_si128(shifted, andm);
     } else {
         return simd_loadu_si128(ptr - 1);
     }
@@ -65,8 +67,10 @@ static SG_FORCEINLINE __m128i simd_load_two_to_left(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
-        val = _mm_unpacklo_epi8(val, val);
-        return _mm_or_si128(val, _mm_and_si128(val, mask));
+        auto shifted = _mm_slli_si128(val, 2);
+        auto unpck = _mm_unpacklo_epi8(val, val);
+        auto andm = _mm_and_si128(unpck, mask);
+        return _mm_or_si128(shifted, andm);
     } else {
         return simd_loadu_si128(ptr - 2);
     }
@@ -77,36 +81,54 @@ static SG_FORCEINLINE __m128i simd_load_three_to_left(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
-        val = _mm_unpacklo_epi8(val, val);
-        val = _mm_unpacklo_epi16(val, val);
-        return _mm_or_si128(val, _mm_and_si128(val, mask));
+        auto shifted = _mm_slli_si128(val, 3);
+        auto unpck = _mm_unpacklo_epi8(val, val);
+        unpck = _mm_unpacklo_epi16(unpck, unpck);
+        auto andm = _mm_and_si128(unpck, mask);
+        return _mm_or_si128(shifted, andm);
     } else {
         return simd_loadu_si128(ptr - 3);
     }
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_four_to_left(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_one_epi16_to_left(const BYTE *ptr) {
     if (isBorder) {
-        auto mask = _mm_setr_epi8(0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto mask = _mm_setr_epi16(0xFFFF, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
-        val = _mm_unpacklo_epi8(val, val);
-        val = _mm_unpacklo_epi16(val, val);
-        return _mm_or_si128(val, _mm_and_si128(val, mask));
+        auto shifted = _mm_slli_si128(val, 2);
+        auto unpck = _mm_unpacklo_epi16(val, val);
+        auto andm = _mm_and_si128(unpck, mask);
+        return _mm_or_si128(shifted, andm);
+    } else {
+        return simd_loadu_si128(ptr - 2);
+    }
+}
+
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_two_epi16_to_left(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_setr_epi16(0xFFFF, 0xFFFF, 00, 00, 00, 00, 00, 00);
+        auto val = simd_load(ptr);
+        auto shifted = _mm_slli_si128(val, 4);
+        auto unpck = _mm_unpacklo_epi16(val, val);
+        auto andm = _mm_and_si128(unpck, mask);
+        return _mm_or_si128(shifted, andm);
     } else {
         return simd_loadu_si128(ptr - 4);
     }
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_six_to_left(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_three_epi16_to_left(const BYTE *ptr) {
     if (isBorder) {
-        auto mask = _mm_setr_epi8(0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto mask = _mm_setr_epi16(0xFFFF, 0xFFFF, 0xFFFF, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
-        val = _mm_unpacklo_epi8(val, val);
-        val = _mm_unpacklo_epi16(val, val);
-        val = _mm_unpacklo_epi32(val, val);
-        return _mm_or_si128(val, _mm_and_si128(val, mask));
+        auto shifted = _mm_slli_si128(val, 6);
+        auto unpck = _mm_unpacklo_epi16(val, val);
+        unpck = _mm_unpacklo_epi32(unpck, unpck);
+        auto andm = _mm_and_si128(unpck, mask);
+        return _mm_or_si128(shifted, andm);
     } else {
         return simd_loadu_si128(ptr - 6);
     }
@@ -118,7 +140,9 @@ static SG_FORCEINLINE __m128i simd_load_one_to_right(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
-        return _mm_or_si128(_mm_srli_si128(val, 1), _mm_and_si128(val, mask));
+        auto shifted = _mm_srli_si128(val, 1);
+        auto andm = _mm_and_si128(val, mask);
+        return _mm_or_si128(shifted, andm);
     } else {
         return simd_loadu_si128(ptr + 1);
     }
@@ -129,8 +153,10 @@ static SG_FORCEINLINE __m128i simd_load_two_to_right(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
-        val = _mm_unpackhi_epi8(val, val);
-        return _mm_or_si128(val, _mm_and_si128(val, mask));
+        auto shifted = _mm_srli_si128(val, 2);
+        auto unpck = _mm_unpackhi_epi8(val, val);
+        auto andm = _mm_and_si128(unpck, mask);
+        return _mm_or_si128(shifted, andm);
     } else {
         return simd_loadu_si128(ptr + 2);
     }
@@ -141,41 +167,59 @@ static SG_FORCEINLINE __m128i simd_load_three_to_right(const BYTE *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
-        val = _mm_unpackhi_epi8(val, val);
-        val = _mm_unpackhi_epi16(val, val);
-        return _mm_or_si128(val, _mm_and_si128(val, mask));
+        auto shifted = _mm_srli_si128(val, 3);
+        auto unpck = _mm_unpackhi_epi8(val, val);
+        unpck = _mm_unpackhi_epi16(unpck, unpck);
+        auto andm = _mm_and_si128(unpck, mask);
+        return _mm_or_si128(shifted, andm);
     } else {
         return simd_loadu_si128(ptr + 3);
     }
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_four_to_right(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_one_epi16_to_right(const BYTE *ptr) {
     if (isBorder) {
-        auto mask = _mm_set_epi8(0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto mask = _mm_set_epi16(0xFFFF, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
-        val = _mm_unpackhi_epi8(val, val);
-        val = _mm_unpackhi_epi16(val, val);
-        return _mm_or_si128(val, _mm_and_si128(val, mask));
+        auto shifted = _mm_srli_si128(val, 2);
+        auto unpck = _mm_unpackhi_epi16(val, val);
+        auto andm = _mm_and_si128(unpck, mask);
+        return _mm_or_si128(shifted, andm);
+    } else {
+        return simd_loadu_si128(ptr + 2);
+    }
+}
+
+
+template<bool isBorder, decltype(simd_load_si128) simd_load>
+static SG_FORCEINLINE __m128i simd_load_two_epi16_to_right(const BYTE *ptr) {
+    if (isBorder) {
+        auto mask = _mm_set_epi16(0xFFFF, 0xFFFF, 00, 00, 00, 00, 00, 00);
+        auto val = simd_load(ptr);
+        auto shifted = _mm_srli_si128(val, 4);
+        auto unpck = _mm_unpackhi_epi16(val, val);
+        auto andm = _mm_and_si128(unpck, mask);
+        return _mm_or_si128(shifted, andm);
     } else {
         return simd_loadu_si128(ptr + 4);
     }
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_six_to_right(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_three_epi16_to_right(const BYTE *ptr) {
     if (isBorder) {
-        auto mask = _mm_set_epi8(0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
+        auto mask = _mm_set_epi16(0xFFFF, 0xFFFF, 0xFFFF, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
-        val = _mm_unpackhi_epi8(val, val);
-        val = _mm_unpackhi_epi16(val, val);
-        val = _mm_unpackhi_epi32(val, val);
-        return _mm_or_si128(val, _mm_and_si128(val, mask));
+        auto shifted = _mm_srli_si128(val, 6);
+        auto unpck = _mm_unpackhi_epi16(val, val);
+        unpck = _mm_unpackhi_epi32(unpck, unpck);
+        auto andm = _mm_and_si128(unpck, mask);
+        return _mm_or_si128(shifted, andm);
     } else {
         return simd_loadu_si128(ptr + 6);
     }
 }
-
 #pragma warning(default: 4309)
 
 enum Buffers {
@@ -191,16 +235,22 @@ enum Buffers {
     SG_REVERSE = 5
 };
 
+enum class BorderMode {
+    LEFT,
+    RIGHT,
+    NONE
+};
+
 const unsigned int BUFFERS_COUNT = 9;
 
 
-static __forceinline __m128i simd_abs_diff_epu8(__m128i a, __m128i b) {
+static SG_FORCEINLINE __m128i simd_abs_diff_epu8(__m128i a, __m128i b) {
     auto positive = _mm_subs_epu8(a, b);
     auto negative = _mm_subs_epu8(b, a);
     return _mm_or_si128(positive, negative);
 }
 
-static __forceinline __m128i calculateSangnom(const __m128i& p1, const __m128i& p2, const __m128i& p3) {
+static SG_FORCEINLINE __m128i calculateSangnom(const __m128i& p1, const __m128i& p2, const __m128i& p3) {
     auto zero = _mm_setzero_si128();
 
     auto temp_lo = _mm_unpacklo_epi8(p1, zero);
@@ -234,7 +284,7 @@ static __forceinline __m128i calculateSangnom(const __m128i& p1, const __m128i& 
 }
 
 
-static __forceinline __m128i doSomeWeirdMagic(const __m128i& a1, const __m128i& a2, const __m128i& buf, 
+static SG_FORCEINLINE __m128i doSomeWeirdMagic(const __m128i& a1, const __m128i& a2, const __m128i& buf, 
                                               const __m128i& minv, const __m128i& acc, const __m128i& zero) {
     auto average = _mm_avg_epu8(a1, a2);
     auto equalToMin = _mm_cmpeq_epi8(buf, minv);
@@ -244,81 +294,131 @@ static __forceinline __m128i doSomeWeirdMagic(const __m128i& a1, const __m128i& 
     return _mm_or_si128(accNotMin, idk);   
 }
 
+template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
+static FORCEINLINE void prepareBuffersLine(const BYTE* pSrc, const BYTE *pSrcn2, BYTE* pBuffers[BUFFERS_COUNT], int bufferOffset, int width) {
+    for (int x = 0; x < width; x += 16) {
+        auto cur_minus_3   = simd_load_three_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
+        auto cur_minus_2   = simd_load_two_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
+        auto cur_minus_1   = simd_load_one_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
+        auto cur           = simd_load(pSrc+x);
+        auto cur_plus_1    = simd_load_one_to_right<border == BorderMode::RIGHT, simd_load>(pSrc+x); 
+        auto cur_plus_2    = simd_load_two_to_right<border == BorderMode::RIGHT, simd_load>(pSrc+x); 
+        auto cur_plus_3    = simd_load_three_to_right<border == BorderMode::RIGHT, simd_load>(pSrc+x); 
+
+        auto next_minus_3  = simd_load_three_to_left<border == BorderMode::LEFT, simd_load>(pSrcn2+x); 
+        auto next_minus_2  = simd_load_two_to_left<border == BorderMode::LEFT, simd_load>(pSrcn2+x); 
+        auto next_minus_1  = simd_load_one_to_left<border == BorderMode::LEFT, simd_load>(pSrcn2+x); 
+        auto next          = simd_load(pSrcn2+x); 
+        auto next_plus_1   = simd_load_one_to_right<border == BorderMode::RIGHT, simd_load>(pSrcn2+x); 
+        auto next_plus_2   = simd_load_two_to_right<border == BorderMode::RIGHT, simd_load>(pSrcn2+x); 
+        auto next_plus_3   = simd_load_three_to_right<border == BorderMode::RIGHT, simd_load>(pSrcn2+x); 
+
+        auto adiff_m3_p3 = simd_abs_diff_epu8(cur_minus_3, next_plus_3);
+        simd_store(pBuffers[ADIFF_M3_P3]+bufferOffset+x, adiff_m3_p3);
+
+        auto adiff_m2_p2 = simd_abs_diff_epu8(cur_minus_2, next_plus_2);
+        simd_store(pBuffers[ADIFF_M2_P2]+bufferOffset+x, adiff_m2_p2);
+
+        auto adiff_m1_p1 = simd_abs_diff_epu8(cur_minus_1, next_plus_1);
+        simd_store(pBuffers[ADIFF_M1_P1]+bufferOffset+x, adiff_m1_p1);
+
+        auto adiff_0     = simd_abs_diff_epu8(cur, next);
+        simd_store(pBuffers[ADIFF_P0_M0]+bufferOffset+x, adiff_0);
+
+        auto adiff_p1_m1 = simd_abs_diff_epu8(cur_plus_1, next_minus_1);
+        simd_store(pBuffers[ADIFF_P1_M1]+bufferOffset+x, adiff_p1_m1);
+
+        auto adiff_p2_m2 = simd_abs_diff_epu8(cur_plus_2, next_minus_2);
+        simd_store(pBuffers[ADIFF_P2_M2]+bufferOffset+x, adiff_p2_m2);
+
+        auto adiff_p3_m3 = simd_abs_diff_epu8(cur_plus_3, next_minus_3);
+        simd_store(pBuffers[ADIFF_P3_M3]+bufferOffset+x, adiff_p3_m3);
+
+        //////////////////////////////////////////////////////////////////////////
+        auto temp1 = calculateSangnom(cur_minus_1, cur, cur_plus_1);
+        auto temp2 = calculateSangnom(next_plus_1, next, next_minus_1);
+
+        //abs((cur_minus_1*4 + cur*5 - cur_plus_1) / 8  - (next_plus_1*4 + next*5 - next_minus_1) / 8)
+        auto absdiff_p1_p2 = simd_abs_diff_epu8(temp1, temp2); 
+        simd_store(pBuffers[SG_FORWARD]+bufferOffset+x, absdiff_p1_p2);
+        //////////////////////////////////////////////////////////////////////////
+        auto temp3 = calculateSangnom(cur_plus_1, cur, cur_minus_1);
+        auto temp4 = calculateSangnom(next_minus_1, next, next_plus_1);
+
+        //abs((cur_plus_1*4 + cur*5 - cur_minus_1) / 8  - (next_minus_1*4 + next*5 - next_plus_1) / 8)
+        auto absdiff_p3_p4 = simd_abs_diff_epu8(temp3, temp4);
+        simd_store(pBuffers[SG_REVERSE]+bufferOffset+x, absdiff_p3_p4);
+        //////////////////////////////////////////////////////////////////////////
+    }
+}
+
 
 template<decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
-void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, int height, int srcPitch, int bufferPitch) {
+static void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, int height, int srcPitch, int bufferPitch) {
     auto pSrcn2 = pSrc + srcPitch*2;
-    auto zero = _mm_setzero_si128();
 
     int bufferOffset = width;
+    int sse2Width = (width - 1 - 16) / 16 * 16 + 16;
 
     for (int y = 0; y < height / 2 - 1; y++) {
-        for (int x = 0; x < width; x += 16) {
-            auto cur_minus_3   = simd_load_three_to_left<false, simd_load>(pSrc+x); 
-            auto cur_minus_2   = simd_load_two_to_left<false, simd_load>(pSrc+x); 
-            auto cur_minus_1   = simd_load_one_to_left<false, simd_load>(pSrc+x); 
-            auto cur           = simd_load(pSrc+x);
-            auto cur_plus_1    = simd_load_one_to_right<false, simd_load>(pSrc+x); 
-            auto cur_plus_2    = simd_load_two_to_right<false, simd_load>(pSrc+x); 
-            auto cur_plus_3    = simd_load_three_to_right<false, simd_load>(pSrc+x); 
+        prepareBuffersLine<BorderMode::LEFT, simd_load, simd_store>(pSrc, pSrcn2, pBuffers, bufferOffset, 16);
 
-            auto next_minus_3  = simd_load_three_to_left<false, simd_load>(pSrcn2+x); 
-            auto next_minus_2  = simd_load_two_to_left<false, simd_load>(pSrcn2+x); 
-            auto next_minus_1  = simd_load_one_to_left<false, simd_load>(pSrcn2+x); 
-            auto next          = simd_load(pSrcn2+x); 
-            auto next_plus_1   = simd_load_one_to_right<false, simd_load>(pSrcn2+x); 
-            auto next_plus_2   = simd_load_two_to_right<false, simd_load>(pSrcn2+x); 
-            auto next_plus_3   = simd_load_three_to_right<false, simd_load>(pSrcn2+x); 
-
-            auto adiff_m3_p3 = simd_abs_diff_epu8(cur_minus_3, next_plus_3);
-            simd_store(pBuffers[ADIFF_M3_P3]+bufferOffset+x, adiff_m3_p3);
-
-            auto adiff_m2_p2 = simd_abs_diff_epu8(cur_minus_2, next_plus_2);
-            simd_store(pBuffers[ADIFF_M2_P2]+bufferOffset+x, adiff_m2_p2);
-
-            auto adiff_m1_p1 = simd_abs_diff_epu8(cur_minus_1, next_plus_1);
-            simd_store(pBuffers[ADIFF_M1_P1]+bufferOffset+x, adiff_m1_p1);
-
-            auto adiff_0     = simd_abs_diff_epu8(cur, next);
-            simd_store(pBuffers[ADIFF_P0_M0]+bufferOffset+x, adiff_0);
-
-            auto adiff_p1_m1 = simd_abs_diff_epu8(cur_plus_1, next_minus_1);
-            simd_store(pBuffers[ADIFF_P1_M1]+bufferOffset+x, adiff_p1_m1);
-
-            auto adiff_p2_m2 = simd_abs_diff_epu8(cur_plus_2, next_minus_2);
-            simd_store(pBuffers[ADIFF_P2_M2]+bufferOffset+x, adiff_p2_m2);
-
-            auto adiff_p3_m3 = simd_abs_diff_epu8(cur_plus_3, next_minus_3);
-            simd_store(pBuffers[ADIFF_P3_M3]+bufferOffset+x, adiff_p3_m3);
-
-            //////////////////////////////////////////////////////////////////////////
-            auto temp1 = calculateSangnom(cur_minus_1, cur, cur_plus_1);
-            auto temp2 = calculateSangnom(next_plus_1, next, next_minus_1);
-
-            //abs((cur_minus_1*4 + cur*5 - cur_plus_1) / 8  - (next_plus_1*4 + next*5 - next_minus_1) / 8)
-            auto absdiff_p1_p2 = simd_abs_diff_epu8(temp1, temp2); 
-            simd_store(pBuffers[SG_FORWARD]+bufferOffset+x, absdiff_p1_p2);
-            //////////////////////////////////////////////////////////////////////////
-            auto temp3 = calculateSangnom(cur_plus_1, cur, cur_minus_1);
-            auto temp4 = calculateSangnom(next_minus_1, next, next_plus_1);
-
-            //abs((cur_plus_1*4 + cur*5 - cur_minus_1) / 8  - (next_minus_1*4 + next*5 - next_plus_1) / 8)
-            auto absdiff_p3_p4 = simd_abs_diff_epu8(temp3, temp4);
-            simd_store(pBuffers[SG_REVERSE]+bufferOffset+x, absdiff_p3_p4);
-            //////////////////////////////////////////////////////////////////////////
-        }
+        prepareBuffersLine<BorderMode::NONE, simd_load, simd_store>(pSrc + 16, pSrcn2+16, pBuffers, bufferOffset+16, sse2Width - 16);
+        /* right */
+        prepareBuffersLine<BorderMode::RIGHT, simd_loadu_si128, simd_storeu_si128>(pSrc + width - 16, pSrcn2 + width - 16, pBuffers, bufferOffset + width - 16, 16);
+      
         pSrc += srcPitch*2;
         pSrcn2 += srcPitch*2;
         bufferOffset += bufferPitch;
     }
 }
 
-void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch, int height) {
+template<BorderMode border>
+static SG_FORCEINLINE void finalizeBufferProcessingBlock(BYTE* pTemp, BYTE* pSrcn, int x) {
+    auto cur_minus_6_lo = simd_load_three_epi16_to_left<border == BorderMode::LEFT, simd_load_si128>(pTemp+x*2);
+    auto cur_minus_4_lo = simd_load_two_epi16_to_left<border == BorderMode::LEFT, simd_load_si128>(pTemp+x*2);
+    auto cur_minus_2_lo = simd_load_one_epi16_to_left<border == BorderMode::LEFT, simd_load_si128>(pTemp+x*2);
+    auto cur_lo         = simd_load_si128(pTemp+x*2);
+    auto cur_plus_2_lo  = simd_load_one_epi16_to_right<false, simd_load_si128>(pTemp+x*2);
+    auto cur_plus_4_lo  = simd_load_two_epi16_to_right<false, simd_load_si128>(pTemp+x*2);
+    auto cur_plus_6_lo  = simd_load_three_epi16_to_right<false, simd_load_si128>(pTemp+x*2);
+
+    auto cur_minus_6_hi = simd_load_three_epi16_to_left<false, simd_load_si128>(pTemp+x*2+16);
+    auto cur_minus_4_hi = simd_load_two_epi16_to_left<false, simd_load_si128>(pTemp+x*2+16);
+    auto cur_minus_2_hi = simd_load_one_epi16_to_left<false, simd_load_si128>(pTemp+x*2+16);
+    auto cur_hi         = simd_load_si128(pTemp+x*2+16);
+    auto cur_plus_2_hi  = simd_load_one_epi16_to_right<border == BorderMode::RIGHT, simd_load_si128>(pTemp+x*2+16);
+    auto cur_plus_4_hi  = simd_load_two_epi16_to_right<border == BorderMode::RIGHT, simd_load_si128>(pTemp+x*2+16);
+    auto cur_plus_6_hi  = simd_load_three_epi16_to_right<border == BorderMode::RIGHT, simd_load_si128>(pTemp+x*2+16);
+
+    auto sum_lo = _mm_adds_epu16(cur_minus_6_lo, cur_minus_4_lo);
+    sum_lo = _mm_adds_epu16(sum_lo, cur_minus_2_lo);
+    sum_lo = _mm_adds_epu16(sum_lo, cur_lo);
+    sum_lo = _mm_adds_epu16(sum_lo, cur_plus_2_lo);
+    sum_lo = _mm_adds_epu16(sum_lo, cur_plus_4_lo);
+    sum_lo = _mm_adds_epu16(sum_lo, cur_plus_6_lo);
+
+    sum_lo = _mm_srli_epi16(sum_lo, 4);
+
+    auto sum_hi = _mm_adds_epu16(cur_minus_6_hi, cur_minus_4_hi);
+    sum_hi = _mm_adds_epu16(sum_hi, cur_minus_2_hi);
+    sum_hi = _mm_adds_epu16(sum_hi, cur_hi);
+    sum_hi = _mm_adds_epu16(sum_hi, cur_plus_2_hi);
+    sum_hi = _mm_adds_epu16(sum_hi, cur_plus_4_hi);
+    sum_hi = _mm_adds_epu16(sum_hi, cur_plus_6_hi);
+
+    sum_hi = _mm_srli_epi16(sum_hi, 4);
+
+    auto result = _mm_packus_epi16(sum_lo, sum_hi);
+    simd_store_si128(pSrcn+x, result);
+}
+
+static void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch, int height) {
     for (int i = 0; i < BUFFERS_COUNT; ++i) {
         auto pSrc = pBuffers[i];
         auto pSrcn = pSrc + pitch;
         auto pSrcn2 = pSrcn + pitch;
-
+        
         for (int y = 0; y < height - 1; ++y) {
             auto zero = _mm_setzero_si128();
             for(int x = 0; x < pitch; x+= 16) {
@@ -344,44 +444,13 @@ void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch, int h
                 simd_store_si128(pTemp+(x*2)+16, sum_hi);
             }
 
-            for (int x = 0; x < pitch; x+= 16) {
-                auto cur_minus_6_lo = simd_load_six_to_left<false, simd_load_si128>(pTemp+x*2);
-                auto cur_minus_4_lo = simd_load_four_to_left<false, simd_load_si128>(pTemp+x*2);
-                auto cur_minus_2_lo = simd_load_two_to_left<false, simd_load_si128>(pTemp+x*2);
-                auto cur_lo         = simd_load_si128(pTemp+x*2);
-                auto cur_plus_2_lo  = simd_load_two_to_right<false, simd_load_si128>(pTemp+x*2);
-                auto cur_plus_4_lo  = simd_load_four_to_right<false, simd_load_si128>(pTemp+x*2);
-                auto cur_plus_6_lo  = simd_load_six_to_right<false, simd_load_si128>(pTemp+x*2);
+            finalizeBufferProcessingBlock<BorderMode::LEFT>(pTemp, pSrcn, 0);
 
-                auto cur_minus_6_hi = simd_load_six_to_left<false, simd_load_si128>(pTemp+x*2+16);
-                auto cur_minus_4_hi = simd_load_four_to_left<false, simd_load_si128>(pTemp+x*2+16);
-                auto cur_minus_2_hi = simd_load_two_to_left<false, simd_load_si128>(pTemp+x*2+16);
-                auto cur_hi         = simd_load_si128(pTemp+x*2+16);
-                auto cur_plus_2_hi  = simd_load_two_to_right<false, simd_load_si128>(pTemp+x*2+16);
-                auto cur_plus_4_hi  = simd_load_four_to_right<false, simd_load_si128>(pTemp+x*2+16);
-                auto cur_plus_6_hi  = simd_load_six_to_right<false, simd_load_si128>(pTemp+x*2+16);
-
-                auto sum_lo = _mm_adds_epu16(cur_minus_6_lo, cur_minus_4_lo);
-                sum_lo = _mm_adds_epu16(sum_lo, cur_minus_2_lo);
-                sum_lo = _mm_adds_epu16(sum_lo, cur_lo);
-                sum_lo = _mm_adds_epu16(sum_lo, cur_plus_2_lo);
-                sum_lo = _mm_adds_epu16(sum_lo, cur_plus_4_lo);
-                sum_lo = _mm_adds_epu16(sum_lo, cur_plus_6_lo);
-
-                sum_lo = _mm_srli_epi16(sum_lo, 4);
-
-                auto sum_hi = _mm_adds_epu16(cur_minus_6_hi, cur_minus_4_hi);
-                sum_hi = _mm_adds_epu16(sum_hi, cur_minus_2_hi);
-                sum_hi = _mm_adds_epu16(sum_hi, cur_hi);
-                sum_hi = _mm_adds_epu16(sum_hi, cur_plus_2_hi);
-                sum_hi = _mm_adds_epu16(sum_hi, cur_plus_4_hi);
-                sum_hi = _mm_adds_epu16(sum_hi, cur_plus_6_hi);
-
-                sum_hi = _mm_srli_epi16(sum_hi, 4);
-
-                auto result = _mm_packus_epi16(sum_lo, sum_hi);
-                simd_store_si128(pSrcn+x, result);
+            for (int x = 16; x < pitch-16; x+= 16) {
+                finalizeBufferProcessingBlock<BorderMode::NONE>(pTemp, pSrcn, x);
             }
+
+            finalizeBufferProcessingBlock<BorderMode::RIGHT>(pTemp, pSrcn, pitch-16);
 
             pSrc += pitch;
             pSrcn += pitch;
@@ -390,88 +459,99 @@ void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch, int h
     }
 }
 
+template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
+static FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn2, BYTE* pDstn, BYTE* pBuffers[BUFFERS_COUNT], int bufferOffset, int width, const __m128i& aav) {
+    auto zero = _mm_setzero_si128();
+    for (int x = 0; x < width; x += 16) {
+        auto buf0 = simd_load(pBuffers[ADIFF_M3_P3] + bufferOffset + x); 
+        auto buf1 = simd_load(pBuffers[ADIFF_M2_P2] + bufferOffset + x); 
+        auto buf2 = simd_load(pBuffers[ADIFF_M1_P1] + bufferOffset + x); 
+        auto buf3 = simd_load(pBuffers[SG_FORWARD]  + bufferOffset + x); 
+        auto buf4 = simd_load(pBuffers[ADIFF_P0_M0] + bufferOffset + x); 
+        auto buf5 = simd_load(pBuffers[SG_REVERSE]  + bufferOffset + x); 
+        auto buf6 = simd_load(pBuffers[ADIFF_P1_M1] + bufferOffset + x); 
+        auto buf7 = simd_load(pBuffers[ADIFF_P2_M2] + bufferOffset + x); 
+        auto buf8 = simd_load(pBuffers[ADIFF_P3_M3] + bufferOffset + x); 
+
+        auto cur_minus_3   = simd_load_three_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
+        auto cur_minus_2   = simd_load_two_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
+        auto cur_minus_1   = simd_load_one_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
+        auto cur           = simd_load(pSrc+x); 
+        auto cur_plus_1    = simd_load_one_to_right<border == BorderMode::RIGHT, simd_load>(pSrc+x); 
+        auto cur_plus_2    = simd_load_two_to_right<border == BorderMode::RIGHT, simd_load>(pSrc+x); 
+        auto cur_plus_3    = simd_load_three_to_right<border == BorderMode::RIGHT, simd_load>(pSrc+x); 
+
+        auto next_minus_3  = simd_load_three_to_left<border == BorderMode::LEFT, simd_load>(pSrcn2+x); 
+        auto next_minus_2  = simd_load_two_to_left<border == BorderMode::LEFT, simd_load>(pSrcn2+x); 
+        auto next_minus_1  = simd_load_one_to_left<border == BorderMode::LEFT, simd_load>(pSrcn2+x); 
+        auto next          = simd_load(pSrcn2+x); 
+        auto next_plus_1   = simd_load_one_to_right<border == BorderMode::RIGHT, simd_load>(pSrcn2+x); 
+        auto next_plus_2   = simd_load_two_to_right<border == BorderMode::RIGHT, simd_load>(pSrcn2+x); 
+        auto next_plus_3   = simd_load_three_to_right<border == BorderMode::RIGHT, simd_load>(pSrcn2+x); 
+
+        auto minv = _mm_min_epu8(buf0, buf1);
+        minv = _mm_min_epu8(minv, buf2);
+        minv = _mm_min_epu8(minv, buf3);
+        minv = _mm_min_epu8(minv, buf4);
+        minv = _mm_min_epu8(minv, buf5);
+        minv = _mm_min_epu8(minv, buf6);
+        minv = _mm_min_epu8(minv, buf7);
+        minv = _mm_min_epu8(minv, buf8);
+
+        auto acc = _mm_setzero_si128();
+
+        acc = doSomeWeirdMagic(cur_minus_3, next_plus_3, buf0, minv, acc, zero);
+        acc = doSomeWeirdMagic(cur_plus_3, next_minus_3, buf8, minv, acc, zero);
+
+        acc = doSomeWeirdMagic(cur_minus_2, next_plus_2, buf1, minv, acc, zero);
+        acc = doSomeWeirdMagic(cur_plus_2, next_minus_2, buf7, minv, acc, zero);
+
+        acc = doSomeWeirdMagic(cur_minus_1, next_plus_1, buf2, minv, acc, zero);
+        acc = doSomeWeirdMagic(cur_plus_1, next_minus_1, buf6, minv, acc, zero);
+
+        ////////////////////////////////////////////////////////////////////////////
+        auto temp1 = calculateSangnom(cur_minus_1, cur, cur_plus_1);
+        auto temp2 = calculateSangnom(next_plus_1, next, next_minus_1);
+
+        acc = doSomeWeirdMagic(temp1, temp2, buf3, minv, acc, zero);
+        ////////////////////////////////////////////////////////////////////////////
+        auto temp3 = calculateSangnom(cur_plus_1, cur, cur_minus_1);
+        auto temp4 = calculateSangnom(next_minus_1, next, next_plus_1);
+
+        acc = doSomeWeirdMagic(temp3, temp4, buf5, minv, acc, zero);
+        ////////////////////////////////////////////////////////////////////////////
+
+        auto avg = _mm_avg_epu8(cur, next);
+
+        auto equalToMin = _mm_cmpeq_epi8(buf4, minv);
+        auto notEqualToMin = _mm_cmpeq_epi8(equalToMin, zero);
+
+        auto idk = _mm_subs_epu8(minv, aav);
+        idk = _mm_cmpeq_epi8(idk, zero);
+        notEqualToMin = _mm_and_si128(notEqualToMin, idk);
+
+        acc = _mm_and_si128(acc, notEqualToMin);
+        auto t2 = _mm_andnot_si128(notEqualToMin, avg);
+        acc = _mm_or_si128(acc, t2);
+        simd_store(pDstn+x, acc);
+    }
+}
+
 template<decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
-void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch, int bufferPitch, int width, int height, int aa) {
+static void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch, int bufferPitch, int width, int height, int aa) {
     auto pDstn = pDst + dstPitch;
     auto pSrcn2 = pSrc + srcPitch*2;
-    auto zero = _mm_setzero_si128();
     auto aav = _mm_set1_epi8(aa);
     int bufferOffset = bufferPitch;
+    int sse2Width = (width - 1 - 16) / 16 * 16 + 16;
 
     for (int y = 0; y < height / 2 - 1; ++y) {
-        for (int x = 0; x < width; x += 16) {
-            auto buf0 = simd_load(pBuffers[ADIFF_M3_P3] + bufferOffset + x); 
-            auto buf1 = simd_load(pBuffers[ADIFF_M2_P2] + bufferOffset + x); 
-            auto buf2 = simd_load(pBuffers[ADIFF_M1_P1] + bufferOffset + x); 
-            auto buf3 = simd_load(pBuffers[SG_FORWARD]  + bufferOffset + x); 
-            auto buf4 = simd_load(pBuffers[ADIFF_P0_M0] + bufferOffset + x); 
-            auto buf5 = simd_load(pBuffers[SG_REVERSE]  + bufferOffset + x); 
-            auto buf6 = simd_load(pBuffers[ADIFF_P1_M1] + bufferOffset + x); 
-            auto buf7 = simd_load(pBuffers[ADIFF_P2_M2] + bufferOffset + x); 
-            auto buf8 = simd_load(pBuffers[ADIFF_P3_M3] + bufferOffset + x); 
+        finalizePlaneLine<BorderMode::LEFT, simd_load, simd_store>(pSrc, pSrcn2, pDstn, pBuffers, bufferOffset, 16, aav);
 
-            auto cur_minus_3   = simd_load_three_to_left<false, simd_load>(pSrc+x); 
-            auto cur_minus_2   = simd_load_two_to_left<false, simd_load>(pSrc+x); 
-            auto cur_minus_1   = simd_load_one_to_left<false, simd_load>(pSrc+x); 
-            auto cur           = simd_load(pSrc+x); 
-            auto cur_plus_1    = simd_load_one_to_right<false, simd_load>(pSrc+x); 
-            auto cur_plus_2    = simd_load_two_to_right<false, simd_load>(pSrc+x); 
-            auto cur_plus_3    = simd_load_three_to_right<false, simd_load>(pSrc+x); 
+        finalizePlaneLine<BorderMode::NONE, simd_load, simd_store>(pSrc + 16, pSrcn2+16, pDstn+16, pBuffers, bufferOffset+16, sse2Width - 16, aav);
 
-            auto next_minus_3  = simd_load_three_to_left<false, simd_load>(pSrcn2+x); 
-            auto next_minus_2  = simd_load_two_to_left<false, simd_load>(pSrcn2+x); 
-            auto next_minus_1  = simd_load_one_to_left<false, simd_load>(pSrcn2+x); 
-            auto next          = simd_load(pSrcn2+x); 
-            auto next_plus_1   = simd_load_one_to_right<false, simd_load>(pSrcn2+x); 
-            auto next_plus_2   = simd_load_two_to_right<false, simd_load>(pSrcn2+x); 
-            auto next_plus_3   = simd_load_three_to_right<false, simd_load>(pSrcn2+x); 
+        finalizePlaneLine<BorderMode::RIGHT, simd_loadu_si128, simd_storeu_si128>(pSrc + width - 16, pSrcn2 + width - 16, pDstn + width - 16, pBuffers, bufferOffset + width - 16, 16, aav);
 
-            auto minv = _mm_min_epu8(buf0, buf1);
-            minv = _mm_min_epu8(minv, buf2);
-            minv = _mm_min_epu8(minv, buf3);
-            minv = _mm_min_epu8(minv, buf4);
-            minv = _mm_min_epu8(minv, buf5);
-            minv = _mm_min_epu8(minv, buf6);
-            minv = _mm_min_epu8(minv, buf7);
-            minv = _mm_min_epu8(minv, buf8);
-
-            auto acc = _mm_setzero_si128();
-
-            acc = doSomeWeirdMagic(cur_minus_3, next_plus_3, buf0, minv, acc, zero);
-            acc = doSomeWeirdMagic(cur_plus_3, next_minus_3, buf8, minv, acc, zero);
-
-            acc = doSomeWeirdMagic(cur_minus_2, next_plus_2, buf1, minv, acc, zero);
-            acc = doSomeWeirdMagic(cur_plus_2, next_minus_2, buf7, minv, acc, zero);
-
-            acc = doSomeWeirdMagic(cur_minus_1, next_plus_1, buf2, minv, acc, zero);
-            acc = doSomeWeirdMagic(cur_plus_1, next_minus_1, buf6, minv, acc, zero);
-
-            //////////////////////////////////////////////////////////////////////////
-            auto temp1 = calculateSangnom(cur_minus_1, cur, cur_plus_1);
-            auto temp2 = calculateSangnom(next_plus_1, next, next_minus_1);
-
-            acc = doSomeWeirdMagic(temp1, temp2, buf3, minv, acc, zero);
-            //////////////////////////////////////////////////////////////////////////
-            auto temp3 = calculateSangnom(cur_plus_1, cur, cur_minus_1);
-            auto temp4 = calculateSangnom(next_minus_1, next, next_plus_1);
-
-            acc = doSomeWeirdMagic(temp3, temp4, buf5, minv, acc, zero);
-            //////////////////////////////////////////////////////////////////////////
-
-            auto avg = _mm_avg_epu8(cur, next);
-
-            auto equalToMin = _mm_cmpeq_epi8(buf4, minv);
-            auto notEqualToMin = _mm_cmpeq_epi8(equalToMin, zero);
-
-            auto idk = _mm_subs_epu8(minv, aav);
-            idk = _mm_cmpeq_epi8(idk, zero);
-            notEqualToMin = _mm_and_si128(notEqualToMin, idk);
-
-            acc = _mm_and_si128(acc, notEqualToMin);
-            auto t2 = _mm_andnot_si128(notEqualToMin, avg);
-            acc = _mm_or_si128(acc, t2);
-            simd_store(pDstn+x, acc);
-        }
         pSrc += srcPitch * 2;
         pSrcn2 += srcPitch * 2;
         pDstn += dstPitch *2;
