@@ -3,6 +3,9 @@
 #include "avisynth.h"
 #pragma warning(default: 4512 4244 4100)
 #include <emmintrin.h>
+#include <thread>
+
+#include "threading.h"
 
 #ifdef __INTEL_COMPILER
 #define SG_FORCEINLINE inline
@@ -241,7 +244,7 @@ enum class BorderMode {
     NONE
 };
 
-const unsigned int BUFFERS_COUNT = 9;
+const int BUFFERS_COUNT = 9;
 
 
 static SG_FORCEINLINE __m128i simd_abs_diff_epu8(__m128i a, __m128i b) {
@@ -414,9 +417,8 @@ static SG_FORCEINLINE void finalizeBufferProcessingBlock(BYTE* pTemp, BYTE* pSrc
     simd_store_si128(pSrcn+x, result);
 }
 
-static void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch, int height) {
-    for (int i = 0; i < BUFFERS_COUNT; ++i) {
-        auto pSrc = pBuffers[i];
+static void processBuffer(BYTE* pBuffer, BYTE* pTemp, int pitch, int height) {
+        auto pSrc = pBuffer;
         auto pSrcn = pSrc + pitch;
         auto pSrcn2 = pSrcn + pitch;
 
@@ -457,7 +459,6 @@ static void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch
             pSrcn += pitch;
             pSrcn2 += pitch;
         }
-    }
 }
 
 template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_load_si128) simd_load_buffer, decltype(simd_store_si128) simd_store>
@@ -574,13 +575,13 @@ auto finalizePlane_asse2 = &finalizePlane<simd_load_si128, simd_store_si128>;
 
 class SangNom2 : public GenericVideoFilter {
 public:
-    SangNom2(PClip child, int order, int aa, IScriptEnvironment* env);
+    SangNom2(PClip child, int order, int aa, int threads, IScriptEnvironment* env);
 
     PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
     ~SangNom2() {
         _mm_free(buffersPool_);
-        _mm_free(intermediate_);
+        threadPool.askToQuit();
     }
 
 private:
@@ -592,13 +593,14 @@ private:
     BYTE *buffersPool_;
     int bufferPitch_;
     int bufferHeight_;
-    BYTE *intermediate_;
+    ThreadPool threadPool;
 
     void processPlane(IScriptEnvironment* env, const BYTE* srcp, BYTE* dstp, int width, int height, int src_pitch, int dst_pitch, int aa);
+    void processBuffers();
 };
 
-SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
-    : GenericVideoFilter(child), order_(order), buffersPool_(nullptr), intermediate_(nullptr) {
+SangNom2::SangNom2(PClip child, int order, int aa, int threads, IScriptEnvironment* env)
+    : GenericVideoFilter(child), order_(order), buffersPool_(nullptr), threadPool(threads <= 1 ? 1 : threads - 1) {
         if(!vi.IsPlanar()) {
             env->ThrowError("SangNom2 works only with planar colorspaces");
         }
@@ -619,10 +621,30 @@ SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
             buffers_[i] = buffersPool_ + bufferSize * i;
             memset(buffers_[i], 0, bufferPitch_); //this is important... I think
         }
-        intermediate_ = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_*2, 16));
 
         aa = min(128, aa);
         aa_ = (21 * aa) / 16;
+}
+
+void SangNom2::processBuffers() {
+    int buffersToMain = BUFFERS_COUNT / (threadPool.numberOfThreads() + 1);
+    if (buffersToMain == 0) {
+        buffersToMain = 1;
+    }
+
+    for (int i = 0; i < BUFFERS_COUNT - buffersToMain; ++i) {
+        threadPool.enqueue([=] {
+            auto temp = (BYTE*)_alloca(bufferPitch_ * 2);
+            processBuffer(buffers_[i], temp, bufferPitch_, bufferHeight_);
+        });
+    }
+
+    auto temp = (BYTE*)_alloca(bufferPitch_ * 2);
+    for(int i = BUFFERS_COUNT - buffersToMain; i < BUFFERS_COUNT; ++i) {
+        processBuffer(buffers_[i], temp, bufferPitch_, bufferHeight_);
+    }
+
+    threadPool.waitAll();
 }
 
 void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch, int aa) {
@@ -642,7 +664,9 @@ void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDs
     }
 
     prepareBuffers_op(pSrc + offset_*srcPitch, buffers_, width, height, srcPitch, bufferPitch_);
-    processBuffers(buffers_, intermediate_, bufferPitch_, bufferHeight_);
+
+    this->processBuffers();
+    
     finalizePlane_op(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa);
 }
 
@@ -671,11 +695,12 @@ PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
 
 
 AVSValue __cdecl Create_SangNom2(AVSValue args, void*, IScriptEnvironment* env) {
-    enum { CLIP, ORDER, AA };
-    return new SangNom2(args[CLIP].AsClip(), args[ORDER].AsInt(1), args[AA].AsInt(48), env);
+    enum { CLIP, ORDER, AA, THREADS };
+    int envThreads = std::thread::hardware_concurrency();
+    return new SangNom2(args[CLIP].AsClip(), args[ORDER].AsInt(1), args[AA].AsInt(48), args[THREADS].AsInt(envThreads), env);
 }
 
 extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit2(IScriptEnvironment* env) {
-    env->AddFunction("SangNom2", "c[order]i[aa]i", Create_SangNom2, 0);
+    env->AddFunction("SangNom2", "c[order]i[aa]i[threads]i", Create_SangNom2, 0);
     return "`x' xxx";
 }
