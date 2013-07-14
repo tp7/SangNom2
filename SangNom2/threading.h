@@ -11,7 +11,7 @@
 //inspired by http://progsch.net/wordpress/?p=81
 class ThreadPool {
 public:
-    explicit ThreadPool(int threads): quit(false) {
+    explicit ThreadPool(int threads): quit(false), runningThreads(0) {
         for (int i = 0; i < threads; ++i) {
             this->threads.emplace_back([&]{
                 while(true) {
@@ -24,8 +24,15 @@ public:
                     }
                     auto function = this->tasks.front();
                     this->tasks.pop();
+                    ++runningThreads;
                     lock.unlock();
+
                     function();
+                    
+                    lock.lock();
+                    --runningThreads;
+                    lock.unlock();
+
                     externalCondition.notify_all();
                 }
             });
@@ -49,17 +56,18 @@ public:
     }
 
     void waitAll() {
-        if (this->tasks.empty()) {
-            return;
-        }
         std::unique_lock<std::mutex> lock(this->mutex);
-        while(!this->tasks.empty()) {
+        while(!this->tasks.empty() || runningThreads > 0) {
             this->externalCondition.wait(lock);
         }
     }
 
     void askToQuit() {
-        this->quit = true;
+        {
+            std::unique_lock<std::mutex> lock(this->mutex);
+            this->quit = true;
+        }
+        
         internalCondition.notify_all();
         externalCondition.notify_all();
     }
@@ -76,6 +84,7 @@ private:
     std::condition_variable internalCondition;
     std::condition_variable externalCondition;
     bool quit;
+    int runningThreads;
 };
 
 
