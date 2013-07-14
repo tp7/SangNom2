@@ -696,7 +696,7 @@ PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
 
 AVSValue __cdecl Create_SangNom2(AVSValue args, void*, IScriptEnvironment* env) {
     enum { CLIP, ORDER, AA, THREADS };
-    int envThreads = std::thread::hardware_concurrency();
+    int envThreads = min(std::thread::hardware_concurrency(), 4);
     return new SangNom2(args[CLIP].AsClip(), args[ORDER].AsInt(1), args[AA].AsInt(48), args[THREADS].AsInt(envThreads), env);
 }
 
