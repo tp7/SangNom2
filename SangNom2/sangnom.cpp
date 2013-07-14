@@ -542,11 +542,11 @@ static SG_FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn
 }
 
 template<decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
-static void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch, int bufferPitch, int width, int height, int aa) {
+static void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch, int bufferPitch, int width, int height, int aa, int bufferOffset) {
     auto pDstn = pDst + dstPitch;
     auto pSrcn2 = pSrc + srcPitch*2;
     auto aav = _mm_set1_epi8(aa);
-    int bufferOffset = bufferPitch;
+    bufferOffset += bufferPitch;
     int sse2Width = (width - 1 - 16) / 16 * 16 + 16;
 
     for (int y = 0; y < height / 2 - 1; ++y) {
@@ -598,10 +598,11 @@ private:
     void processPlane(IScriptEnvironment* env, const BYTE* srcp, BYTE* dstp, int width, int height, int src_pitch, int dst_pitch, int aa);
     void prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch);
     void processBuffers();
+    void finalizePlane(const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch, int aa);
 };
 
 SangNom2::SangNom2(PClip child, int order, int aa, int threads, IScriptEnvironment* env)
-    : GenericVideoFilter(child), order_(order), buffersPool_(nullptr), threadPool(threads <= 1 ? 1 : threads - 1) {
+    : GenericVideoFilter(child), order_(order), buffersPool_(nullptr), threadPool(threads <= 1 ? 0 : threads - 1) {
         if(!vi.IsPlanar()) {
             env->ThrowError("SangNom2 works only with planar colorspaces");
         }
@@ -632,16 +633,20 @@ void SangNom2::prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int heigh
     if (is16byteAligned(pSrc)) {
         prepareBuffers_op = prepareBuffers_asse2;
     }
-
+    
     int heightPerThread = height / (threadPool.numberOfThreads() + 1);
+    heightPerThread += heightPerThread % 2;
     for (int i = 0; i < threadPool.numberOfThreads(); ++i) {
         threadPool.enqueue([=]{
             prepareBuffers_op(pSrc + (offset_+i*heightPerThread)*srcPitch, buffers_, width, heightPerThread+2, srcPitch, bufferPitch_, heightPerThread / 2 * i * bufferPitch_);
         });
     }
 
-    prepareBuffers_op(pSrc + (offset_+threadPool.numberOfThreads()*heightPerThread)*srcPitch, buffers_, width, heightPerThread+2, srcPitch, bufferPitch_, heightPerThread / 2 * threadPool.numberOfThreads() * bufferPitch_);
+    int heightOffset = height - (heightPerThread * threadPool.numberOfThreads());
+    prepareBuffers_op(pSrc + (offset_+threadPool.numberOfThreads()*heightPerThread)*srcPitch, buffers_, width, height - (heightPerThread * threadPool.numberOfThreads()), 
+        srcPitch, bufferPitch_, heightPerThread / 2 * threadPool.numberOfThreads() * bufferPitch_);
     threadPool.waitAll();
+
 }
 
 void SangNom2::processBuffers() {
@@ -665,7 +670,27 @@ void SangNom2::processBuffers() {
     threadPool.waitAll();
 }
 
+void SangNom2::finalizePlane(const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch, int aa) {
+    auto finalizePlane_op = finalizePlane_sse2;
+    if (is16byteAligned(pSrc)) {
+        finalizePlane_op = finalizePlane_asse2;
+    }
 
+    int heightPerThread = height / (threadPool.numberOfThreads() + 1);
+    heightPerThread += heightPerThread % 2;
+
+    for (int i = 0; i < threadPool.numberOfThreads(); ++i) {
+        threadPool.enqueue([=]{
+            finalizePlane_op(pSrc + (offset_+i*heightPerThread)*srcPitch, pDst + (offset_+i*heightPerThread) * dstPitch, buffers_, 
+                srcPitch, dstPitch, bufferPitch_, width, heightPerThread+2, aa, heightPerThread / 2 * i * bufferPitch_);
+        });
+    }
+
+    finalizePlane_op(pSrc + (offset_+threadPool.numberOfThreads()*heightPerThread)*srcPitch, pDst + (offset_+threadPool.numberOfThreads()*heightPerThread) * dstPitch, 
+        buffers_, srcPitch, dstPitch, bufferPitch_, width, height - (heightPerThread * threadPool.numberOfThreads()) , aa, heightPerThread * threadPool.numberOfThreads() / 2 * bufferPitch_);
+    
+    threadPool.waitAll();
+}
 
 void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch, int aa) {
     env->BitBlt(pDst + offset_ * dstPitch, dstPitch * 2, pSrc + offset_ * srcPitch, srcPitch * 2, width, height / 2);
@@ -676,17 +701,9 @@ void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDs
         env->BitBlt(pDst+dstPitch * (height-1), dstPitch, pSrc + srcPitch*(height-2), srcPitch, width,1);
     }
 
-
-    auto finalizePlane_op = finalizePlane_sse2;
-    if (is16byteAligned(pSrc)) {
-
-        finalizePlane_op = finalizePlane_asse2;
-    }
-
     this->prepareBuffers(pSrc, pDst, width, height, srcPitch);
     this->processBuffers();
-    
-    finalizePlane_op(pSrc + offset_ * srcPitch, pDst + offset_ * dstPitch, buffers_, srcPitch, dstPitch, bufferPitch_, width, height, aa);
+    this->finalizePlane(pSrc, pDst, width, height, srcPitch, dstPitch, aa);
 }
 
 
