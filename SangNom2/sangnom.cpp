@@ -285,7 +285,7 @@ static SG_FORCEINLINE __m128i calculateSangnom(const __m128i& p1, const __m128i&
 
 
 static SG_FORCEINLINE __m128i blendAvgOnMinimalBuffer(const __m128i& a1, const __m128i& a2, const __m128i& buf, 
-                                              const __m128i& minv, const __m128i& acc, const __m128i& zero) {
+                                                      const __m128i& minv, const __m128i& acc, const __m128i& zero) {
     auto average = _mm_avg_epu8(a1, a2);
     //buffer is minimal
     auto mask = _mm_cmpeq_epi8(buf, minv);
@@ -365,9 +365,9 @@ static void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int 
         prepareBuffersLine<BorderMode::LEFT, simd_load, simd_store_si128>(pSrc, pSrcn2, pBuffers, bufferOffset, 16);
 
         prepareBuffersLine<BorderMode::NONE, simd_load, simd_store_si128>(pSrc + 16, pSrcn2+16, pBuffers, bufferOffset+16, sse2Width - 16);
-        
+
         prepareBuffersLine<BorderMode::RIGHT, simd_loadu_si128, simd_storeu_si128>(pSrc + width - 16, pSrcn2 + width - 16, pBuffers, bufferOffset + width - 16, 16);
-      
+
         pSrc += srcPitch*2;
         pSrcn2 += srcPitch*2;
         bufferOffset += bufferPitch;
@@ -419,7 +419,7 @@ static void processBuffers(BYTE* pBuffers[BUFFERS_COUNT], BYTE* pTemp, int pitch
         auto pSrc = pBuffers[i];
         auto pSrcn = pSrc + pitch;
         auto pSrcn2 = pSrcn + pitch;
-        
+
         for (int y = 0; y < height - 1; ++y) {
             auto zero = _mm_setzero_si128();
             for(int x = 0; x < pitch; x+= 16) {
@@ -525,7 +525,7 @@ static SG_FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn
         auto average = _mm_avg_epu8(cur, next);
 
         auto buf4IsMinimal = _mm_cmpeq_epi8(buf4, minbuf);
-        
+
         auto takeAaa = _mm_subs_epu8(minbuf, aath);
         //this isn't strictly negation, don't optimize
         auto takeProcessed = _mm_cmpeq_epi8(takeAaa, zero);
@@ -579,9 +579,7 @@ public:
     PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
     ~SangNom2() {
-        for (int i = 0; i < BUFFERS_COUNT; i++) {
-            _mm_free(buffers_[i]);
-        }
+        _mm_free(buffersPool_);
         _mm_free(intermediate_);
     }
 
@@ -591,6 +589,7 @@ private:
     int aa_;
 
     BYTE *buffers_[BUFFERS_COUNT];
+    BYTE *buffersPool_;
     int bufferPitch_;
     int bufferHeight_;
     BYTE *intermediate_;
@@ -599,7 +598,7 @@ private:
 };
 
 SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
-    : GenericVideoFilter(child), order_(order) {
+    : GenericVideoFilter(child), order_(order), buffersPool_(nullptr), intermediate_(nullptr) {
         if(!vi.IsPlanar()) {
             env->ThrowError("SangNom2 works only with planar colorspaces");
         }
@@ -614,19 +613,21 @@ SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
 
         bufferPitch_ = (vi.width + 15) / 16 * 16;
         bufferHeight_ = (vi.height + 1) / 2;
+        int bufferSize = bufferPitch_ * (bufferHeight_+1);
+        buffersPool_ = reinterpret_cast<BYTE*>(_mm_malloc(bufferSize * BUFFERS_COUNT, 16));
         for (int i = 0; i < BUFFERS_COUNT; i++) {
-            buffers_[i] = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_ * (bufferHeight_+1), 16));
+            buffers_[i] = buffersPool_ + bufferSize * i;
             memset(buffers_[i], 0, bufferPitch_); //this is important... I think
         }
         intermediate_ = reinterpret_cast<BYTE*>(_mm_malloc(bufferPitch_*2, 16));
-        
+
         aa = min(128, aa);
         aa_ = (21 * aa) / 16;
 }
 
 void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch, int aa) {
     env->BitBlt(pDst + offset_ * dstPitch, dstPitch * 2, pSrc + offset_ * srcPitch, srcPitch * 2, width, height / 2);
-    
+
     if (offset_ == 1) {
         env->BitBlt(pDst, dstPitch, pSrc + srcPitch, srcPitch, width,1);
     } else {
