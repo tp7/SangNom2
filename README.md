@@ -6,12 +6,13 @@ Reimplementation of the old MarcFD's SangNom filter. Output is not completely bu
 * It's open source
 * Correct borders processing
 * Additinal colorspace support
+* Multithreading support
 * Requries SSE2
 
-Performance right now is mostly identical to the old version despite this plugin using SSE2. Additional improvements are planned.
+Singlethreaded performance is mostly identical to the old version despite this plugin using SSE2.
 
 ### Y8 ###
-The most important difference for now is Y8 support in AviSynth 2.6. This enables much faster antialiasing (especially when used with [FTurn](https://github.com/tp7/fturn) plugin) without any chroma processing.
+One of the most important differences is Y8 support in AviSynth 2.6. This enables much faster antialiasing (especially when used with [FTurn](https://github.com/tp7/fturn) plugin) without any chroma processing.
 ```
 function maa(clip input, int "mask") {
     mask = input.mt_edge("sobel",7,7,5,5).mt_inflate()
@@ -20,6 +21,10 @@ function maa(clip input, int "mask") {
     return mt_merge(input,aa_clip,mask,u=2,v=2) 
 }
 ```
+### Multithreading ###
+This plugin uses min(number of logical processors, 4) threads to do its job. You can control number of threads using the *threads* parameter. In my tests performance doesn't get any better when using more than 4 threads.
+
+Internally it uses a simple thread pool but I do consider switching to avstp if it gets a bit nicer api.
 
 ### License ###
 This project is licensed under the [MIT license](http://opensource.org/licenses/MIT). Binaries are [GPL v2](http://www.gnu.org/licenses/gpl-2.0.html) because if I understand licensing stuff right (please tell me if I don't) they must be.
