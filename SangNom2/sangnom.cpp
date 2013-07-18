@@ -3,7 +3,6 @@
 #include "avisynth.h"
 #pragma warning(default: 4512 4244 4100)
 #include <emmintrin.h>
-#include <vector>
 #include "AvstpWrapper.h"
 
 #ifdef __INTEL_COMPILER
@@ -650,26 +649,24 @@ void SangNom2::prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int heigh
         decltype(prepareBuffers_op) op;
     };
 
-    std::vector<RunData> datas;
-
+    auto pData = reinterpret_cast<RunData*>(_alloca(sizeof(RunData) * pool.numberOfThreads()));
     for (int i = 0; i < pool.numberOfThreads(); ++i) {
-        RunData d;
-        d.pSrc = pSrc + (offset_+i*heightPerThread)*srcPitch;
-        d.buffers = buffers_;
-        d.width = width;
-        d.height = heightPerThread + 2;
-        d.srcPitch = srcPitch;
-        d.bufferPitch = bufferPitch_;
-        d.bufferOffset = heightPerThread / 2 * i * bufferPitch_;
-        d.op = prepareBuffers_op;
-        datas.push_back(d);
+        auto d = new (pData + i) RunData;
+        d->pSrc = pSrc + (offset_+i*heightPerThread)*srcPitch;
+        d->buffers = buffers_;
+        d->width = width;
+        d->height = heightPerThread + 2;
+        d->srcPitch = srcPitch;
+        d->bufferPitch = bufferPitch_;
+        d->bufferOffset = heightPerThread / 2 * i * bufferPitch_;
+        d->op = prepareBuffers_op;
     }
 
     for (int i = 0; i < pool.numberOfThreads(); ++i) {
         pool.enqueue(dispatcher_, [](avstp_TaskDispatcher *dispatcher, void *userData){
             auto data = reinterpret_cast<RunData*>(userData);
             data->op(data->pSrc, data->buffers, data->width, data->height, data->srcPitch, data->bufferPitch, data->bufferOffset);
-        }, &datas[i]);
+        }, &pData[i]);
     }
 
     int heightOffset = height - (heightPerThread * pool.numberOfThreads());
@@ -693,13 +690,12 @@ void SangNom2::processBuffers() {
         int bufferHeight;
     };
 
-    std::vector<RunData> datas;
+    auto pData = reinterpret_cast<RunData*>(_alloca(sizeof(RunData) * BUFFERS_COUNT - buffersToMain));
     for (int i = 0; i < BUFFERS_COUNT - buffersToMain; ++i) {
-        RunData d;
-        d.bufferHeight = bufferHeight_;
-        d.bufferPitch = bufferPitch_;
-        d.bufferPtr = buffers_[i];
-        datas.push_back(d);
+        auto d = new(pData+i) RunData;
+        d->bufferHeight = bufferHeight_;
+        d->bufferPitch = bufferPitch_;
+        d->bufferPtr = buffers_[i];
     }
 
     for (int i = 0; i < BUFFERS_COUNT - buffersToMain; ++i) {
@@ -708,7 +704,7 @@ void SangNom2::processBuffers() {
 
             auto temp = (BYTE*)_alloca(data->bufferPitch * 2);
             processBuffer(data->bufferPtr, temp, data->bufferPitch, data->bufferHeight);
-        }, &datas[i]);
+        }, &pData[i]);
     }
 
     auto temp = (BYTE*)_alloca(bufferPitch_ * 2);
@@ -743,22 +739,20 @@ void SangNom2::finalizePlane(const BYTE* pSrc, BYTE* pDst, int width, int height
         decltype(finalizePlane_op) op;
     };
 
-    std::vector<RunData> datas;
-
+    auto pData = reinterpret_cast<RunData*>(_alloca(sizeof(RunData) * pool.numberOfThreads()));
     for (int i = 0; i < pool.numberOfThreads(); ++i) {
-        RunData d;
-        d.pSrc = pSrc + (offset_+i*heightPerThread)*srcPitch;
-        d.pDst = pDst + (offset_+i*heightPerThread) * dstPitch;
-        d.buffers = buffers_;
-        d.width = width;
-        d.height = heightPerThread + 2;
-        d.srcPitch = srcPitch;
-        d.dstPitch = dstPitch;
-        d.bufferPitch = bufferPitch_;
-        d.aa = aa;
-        d.bufferOffset = heightPerThread / 2 * i * bufferPitch_;
-        d.op = finalizePlane_op;
-        datas.push_back(d);
+        auto d = new(pData + i) RunData;
+        d->pSrc = pSrc + (offset_+i*heightPerThread)*srcPitch;
+        d->pDst = pDst + (offset_+i*heightPerThread) * dstPitch;
+        d->buffers = buffers_;
+        d->width = width;
+        d->height = heightPerThread + 2;
+        d->srcPitch = srcPitch;
+        d->dstPitch = dstPitch;
+        d->bufferPitch = bufferPitch_;
+        d->aa = aa;
+        d->bufferOffset = heightPerThread / 2 * i * bufferPitch_;
+        d->op = finalizePlane_op;
     }
 
     
@@ -769,7 +763,7 @@ void SangNom2::finalizePlane(const BYTE* pSrc, BYTE* pDst, int width, int height
 
             d->op(d->pSrc, d->pDst, d->buffers, d->srcPitch, d->dstPitch, d->bufferPitch, d->width, d->height, d->aa, d->bufferOffset);
 
-        }, &datas[i]);
+        }, &pData[i]);
     }
 
     finalizePlane_op(pSrc + (offset_+pool.numberOfThreads()*heightPerThread)*srcPitch, pDst + (offset_+pool.numberOfThreads()*heightPerThread) * dstPitch, 
