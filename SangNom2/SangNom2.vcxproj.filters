@@ -18,12 +18,24 @@
     <ClCompile Include="sangnom.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="AvstpWrapper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AvstpFinder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="avisynth.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="threading.h">
+    <ClInclude Include="avstp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AvstpWrapper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AvstpFinder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

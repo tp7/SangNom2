@@ -3,9 +3,8 @@
 #include "avisynth.h"
 #pragma warning(default: 4512 4244 4100)
 #include <emmintrin.h>
-#include <thread>
-
-#include "threading.h"
+#include <vector>
+#include "AvstpWrapper.h"
 
 #ifdef __INTEL_COMPILER
 #define SG_FORCEINLINE inline
@@ -575,13 +574,12 @@ auto finalizePlane_asse2 = &finalizePlane<simd_load_si128, simd_store_si128>;
 
 class SangNom2 : public GenericVideoFilter {
 public:
-    SangNom2(PClip child, int order, int aa, int threads, IScriptEnvironment* env);
+    SangNom2(PClip child, int order, int aa, IScriptEnvironment* env);
 
     PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
     ~SangNom2() {
         _mm_free(buffersPool_);
-        threadPool.askToQuit();
     }
 
 private:
@@ -593,7 +591,7 @@ private:
     BYTE *buffersPool_;
     int bufferPitch_;
     int bufferHeight_;
-    ThreadPool threadPool;
+    avstp_TaskDispatcher* dispatcher_;
 
     void processPlane(IScriptEnvironment* env, const BYTE* srcp, BYTE* dstp, int width, int height, int src_pitch, int dst_pitch, int aa);
     void prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch);
@@ -601,8 +599,8 @@ private:
     void finalizePlane(const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch, int aa);
 };
 
-SangNom2::SangNom2(PClip child, int order, int aa, int threads, IScriptEnvironment* env)
-    : GenericVideoFilter(child), order_(order), buffersPool_(nullptr), threadPool(threads <= 1 ? 0 : threads - 1) {
+SangNom2::SangNom2(PClip child, int order, int aa, IScriptEnvironment* env)
+    : GenericVideoFilter(child), order_(order), buffersPool_(nullptr) {
         if(!vi.IsPlanar()) {
             env->ThrowError("SangNom2 works only with planar colorspaces");
         }
@@ -614,6 +612,8 @@ SangNom2::SangNom2(PClip child, int order, int aa, int threads, IScriptEnvironme
         if (vi.width < 16) {
             env->ThrowError("Sorry, wight must be bigger or equal to 16");
         }
+
+        dispatcher_ = AvstpWrapper::getInstance().createDispatcher();
 
         bufferPitch_ = (vi.width + 15) / 16 * 16;
         bufferHeight_ = (vi.height + 1) / 2;
@@ -633,33 +633,82 @@ void SangNom2::prepareBuffers(const BYTE* pSrc, BYTE* pDst, int width, int heigh
     if (is16byteAligned(pSrc)) {
         prepareBuffers_op = prepareBuffers_asse2;
     }
+
+    auto &pool = AvstpWrapper::getInstance();
     
-    int heightPerThread = height / (threadPool.numberOfThreads() + 1);
+    int heightPerThread = height / (pool.numberOfThreads() + 1);
     heightPerThread += heightPerThread % 2;
-    for (int i = 0; i < threadPool.numberOfThreads(); ++i) {
-        threadPool.enqueue([=]{
-            prepareBuffers_op(pSrc + (offset_+i*heightPerThread)*srcPitch, buffers_, width, heightPerThread+2, srcPitch, bufferPitch_, heightPerThread / 2 * i * bufferPitch_);
-        });
+
+    struct RunData {
+        const BYTE* pSrc;
+        BYTE** buffers;
+        int width;
+        int height;
+        int srcPitch;
+        int bufferPitch;
+        int bufferOffset;
+        decltype(prepareBuffers_op) op;
+    };
+
+    std::vector<RunData> datas;
+
+    for (int i = 0; i < pool.numberOfThreads(); ++i) {
+        RunData d;
+        d.pSrc = pSrc + (offset_+i*heightPerThread)*srcPitch;
+        d.buffers = buffers_;
+        d.width = width;
+        d.height = heightPerThread + 2;
+        d.srcPitch = srcPitch;
+        d.bufferPitch = bufferPitch_;
+        d.bufferOffset = heightPerThread / 2 * i * bufferPitch_;
+        d.op = prepareBuffers_op;
+        datas.push_back(d);
     }
 
-    int heightOffset = height - (heightPerThread * threadPool.numberOfThreads());
-    prepareBuffers_op(pSrc + (offset_+threadPool.numberOfThreads()*heightPerThread)*srcPitch, buffers_, width, height - (heightPerThread * threadPool.numberOfThreads()), 
-        srcPitch, bufferPitch_, heightPerThread / 2 * threadPool.numberOfThreads() * bufferPitch_);
-    threadPool.waitAll();
+    for (int i = 0; i < pool.numberOfThreads(); ++i) {
+        pool.enqueue(dispatcher_, [](avstp_TaskDispatcher *dispatcher, void *userData){
+            auto data = reinterpret_cast<RunData*>(userData);
+            data->op(data->pSrc, data->buffers, data->width, data->height, data->srcPitch, data->bufferPitch, data->bufferOffset);
+        }, &datas[i]);
+    }
 
+    int heightOffset = height - (heightPerThread * pool.numberOfThreads());
+    prepareBuffers_op(pSrc + (offset_+pool.numberOfThreads()*heightPerThread)*srcPitch, buffers_, width, height - (heightPerThread * pool.numberOfThreads()), 
+        srcPitch, bufferPitch_, heightPerThread / 2 * pool.numberOfThreads() * bufferPitch_);
+    
+    pool.waitCompletion(dispatcher_);
 }
 
 void SangNom2::processBuffers() {
-    int buffersToMain = BUFFERS_COUNT / (threadPool.numberOfThreads() + 1);
+    auto &pool = AvstpWrapper::getInstance();
+
+    int buffersToMain = BUFFERS_COUNT / (pool.numberOfThreads() + 1);
     if (buffersToMain == 0) {
         buffersToMain = 1;
     }
 
+    struct RunData {
+        BYTE* bufferPtr;
+        int bufferPitch;
+        int bufferHeight;
+    };
+
+    std::vector<RunData> datas;
     for (int i = 0; i < BUFFERS_COUNT - buffersToMain; ++i) {
-        threadPool.enqueue([=] {
-            auto temp = (BYTE*)_alloca(bufferPitch_ * 2);
-            processBuffer(buffers_[i], temp, bufferPitch_, bufferHeight_);
-        });
+        RunData d;
+        d.bufferHeight = bufferHeight_;
+        d.bufferPitch = bufferPitch_;
+        d.bufferPtr = buffers_[i];
+        datas.push_back(d);
+    }
+
+    for (int i = 0; i < BUFFERS_COUNT - buffersToMain; ++i) {
+        pool.enqueue(dispatcher_, [](avstp_TaskDispatcher *dispatcher, void *userData){
+            auto data = reinterpret_cast<RunData*>(userData);
+
+            auto temp = (BYTE*)_alloca(data->bufferPitch * 2);
+            processBuffer(data->bufferPtr, temp, data->bufferPitch, data->bufferHeight);
+        }, &datas[i]);
     }
 
     auto temp = (BYTE*)_alloca(bufferPitch_ * 2);
@@ -667,7 +716,7 @@ void SangNom2::processBuffers() {
         processBuffer(buffers_[i], temp, bufferPitch_, bufferHeight_);
     }
 
-    threadPool.waitAll();
+    pool.waitCompletion(dispatcher_);
 }
 
 void SangNom2::finalizePlane(const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch, int aa) {
@@ -675,21 +724,58 @@ void SangNom2::finalizePlane(const BYTE* pSrc, BYTE* pDst, int width, int height
     if (is16byteAligned(pSrc)) {
         finalizePlane_op = finalizePlane_asse2;
     }
+    auto &pool = AvstpWrapper::getInstance();
 
-    int heightPerThread = height / (threadPool.numberOfThreads() + 1);
+    int heightPerThread = height / (pool.numberOfThreads() + 1);
     heightPerThread += heightPerThread % 2;
 
-    for (int i = 0; i < threadPool.numberOfThreads(); ++i) {
-        threadPool.enqueue([=]{
-            finalizePlane_op(pSrc + (offset_+i*heightPerThread)*srcPitch, pDst + (offset_+i*heightPerThread) * dstPitch, buffers_, 
-                srcPitch, dstPitch, bufferPitch_, width, heightPerThread+2, aa, heightPerThread / 2 * i * bufferPitch_);
-        });
+    struct RunData {
+        const BYTE* pSrc;
+        BYTE* pDst;
+        BYTE** buffers;
+        int width;
+        int height;
+        int srcPitch;
+        int dstPitch;
+        int bufferPitch;
+        int bufferOffset;
+        int aa;
+        decltype(finalizePlane_op) op;
+    };
+
+    std::vector<RunData> datas;
+
+    for (int i = 0; i < pool.numberOfThreads(); ++i) {
+        RunData d;
+        d.pSrc = pSrc + (offset_+i*heightPerThread)*srcPitch;
+        d.pDst = pDst + (offset_+i*heightPerThread) * dstPitch;
+        d.buffers = buffers_;
+        d.width = width;
+        d.height = heightPerThread + 2;
+        d.srcPitch = srcPitch;
+        d.dstPitch = dstPitch;
+        d.bufferPitch = bufferPitch_;
+        d.aa = aa;
+        d.bufferOffset = heightPerThread / 2 * i * bufferPitch_;
+        d.op = finalizePlane_op;
+        datas.push_back(d);
     }
 
-    finalizePlane_op(pSrc + (offset_+threadPool.numberOfThreads()*heightPerThread)*srcPitch, pDst + (offset_+threadPool.numberOfThreads()*heightPerThread) * dstPitch, 
-        buffers_, srcPitch, dstPitch, bufferPitch_, width, height - (heightPerThread * threadPool.numberOfThreads()) , aa, heightPerThread * threadPool.numberOfThreads() / 2 * bufferPitch_);
     
-    threadPool.waitAll();
+
+    for (int i = 0; i < pool.numberOfThreads(); ++i) {
+        pool.enqueue(dispatcher_, [](avstp_TaskDispatcher *dispatcher, void *userData){
+            auto d = reinterpret_cast<RunData*>(userData);
+
+            d->op(d->pSrc, d->pDst, d->buffers, d->srcPitch, d->dstPitch, d->bufferPitch, d->width, d->height, d->aa, d->bufferOffset);
+
+        }, &datas[i]);
+    }
+
+    finalizePlane_op(pSrc + (offset_+pool.numberOfThreads()*heightPerThread)*srcPitch, pDst + (offset_+pool.numberOfThreads()*heightPerThread) * dstPitch, 
+        buffers_, srcPitch, dstPitch, bufferPitch_, width, height - (heightPerThread * pool.numberOfThreads()) , aa, heightPerThread * pool.numberOfThreads() / 2 * bufferPitch_);
+    
+    pool.waitCompletion(dispatcher_);
 }
 
 void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDst, int width, int height, int srcPitch, int dstPitch, int aa) {
@@ -708,6 +794,7 @@ void SangNom2::processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDs
 
 
 PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
+    
     auto srcFrame = child->GetFrame(n, env);
     auto dstFrame = env->NewVideoFrame(vi, 16);
 
@@ -731,9 +818,8 @@ PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
 
 
 AVSValue __cdecl Create_SangNom2(AVSValue args, void*, IScriptEnvironment* env) {
-    enum { CLIP, ORDER, AA, THREADS };
-    int envThreads = min(std::thread::hardware_concurrency(), 4);
-    return new SangNom2(args[CLIP].AsClip(), args[ORDER].AsInt(1), args[AA].AsInt(48), args[THREADS].AsInt(envThreads), env);
+    enum { CLIP, ORDER, AA };
+    return new SangNom2(args[CLIP].AsClip(), args[ORDER].AsInt(1), args[AA].AsInt(48), env);
 }
 
 extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit2(IScriptEnvironment* env) {
