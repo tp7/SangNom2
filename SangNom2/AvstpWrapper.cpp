@@ -64,7 +64,8 @@ void AvstpWrapper::destroyDispatcher(avstp_TaskDispatcher *dispatcher)
 
 int	AvstpWrapper::numberOfThreads() 
 {
-	return numberOfThreadsPtr_();
+    int number =  numberOfThreadsPtr_();
+    return number - 1;
 }
 
 
