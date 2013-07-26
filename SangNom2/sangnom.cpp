@@ -737,7 +737,11 @@ AVSValue __cdecl Create_SangNom2(AVSValue args, void*, IScriptEnvironment* env) 
     return new SangNom2(args[CLIP].AsClip(), args[ORDER].AsInt(1), args[AA].AsInt(48), args[AAC].AsInt(0), args[THREADS].AsInt(envThreads), env);
 }
 
-extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit2(IScriptEnvironment* env) {
+const AVS_Linkage *AVS_linkage = nullptr;
+
+extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors) {
+    AVS_linkage = vectors;
+
     env->AddFunction("SangNom2", "c[order]i[aa]i[aac]i[threads]i", Create_SangNom2, 0);
     return "`x' xxx";
 }
