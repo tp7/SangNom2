@@ -26,5 +26,8 @@ This plugin uses min(number of logical processors, 4) threads to do its job. You
 
 Internally it uses a simple thread pool but I do consider switching to avstp if it gets a bit nicer api.
 
+### Chroma processing ###
+Originally, SangNom always assumes aa=0 for chroma processing. This makes some use cases harder to implement, so additional parameter *aac* was introduced. It's the same as *aa* but for chroma. Default value is 0 to maintain backward compatibility.
+
 ### License ###
 This project is licensed under the [MIT license](http://opensource.org/licenses/MIT). Binaries are [GPL v2](http://www.gnu.org/licenses/gpl-2.0.html) because if I understand licensing stuff right (please tell me if I don't) they must be.
