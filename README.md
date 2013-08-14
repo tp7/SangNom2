@@ -14,7 +14,7 @@ Singlethreaded performance is mostly identical to the old version despite this p
 ### Y8 ###
 One of the most important differences is Y8 support in AviSynth 2.6. This enables much faster antialiasing (especially when used with [FTurn](https://github.com/tp7/fturn) plugin) without any chroma processing.
 ```
-function maa(clip input, int "mask") {
+function maa(clip input) {
     mask = input.mt_edge("sobel",7,7,5,5).mt_inflate()
     aa_clip = input.ConvertToY8().Spline36Resize(width(input)*2,height(input)*2).FTurnLeft() \
     			   .SangNom2().FTurnRight().SangNom2().Spline36Resize(width(input),height(input))
