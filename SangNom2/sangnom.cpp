@@ -653,6 +653,9 @@ PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
     auto env2 = static_cast<IScriptEnvironment2*>(env);
     
     auto buffersPool = reinterpret_cast<BYTE*>(env2->Allocate(bufferSize_*BUFFERS_COUNT, 16, true));
+    if (buffersPool == nullptr) {
+        env->ThrowError("Sangnom2: Failed to allocate buffer. Out of memory.");
+    }
     BYTE *buffers[BUFFERS_COUNT];
     for (int i = 0; i < BUFFERS_COUNT; i++) {
         buffers[i] = buffersPool + bufferSize_ * i;
