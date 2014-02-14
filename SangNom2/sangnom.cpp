@@ -1,5 +1,6 @@
 #include <Windows.h>
 #include <avisynth.h>
+#include <avs/alignment.h>
 #include <emmintrin.h>
 #include <thread>
 
@@ -559,10 +560,6 @@ static void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_C
     }
 }
 
-inline bool is16byteAligned(const void *ptr) {
-    return (((unsigned long)ptr) & 15) == 0;
-}
-
 auto prepareBuffers_sse2 = &prepareBuffers<simd_loadu_si128>;
 auto prepareBuffers_asse2 = &prepareBuffers<simd_load_si128>;
 auto finalizePlane_sse2 = &finalizePlane<simd_loadu_si128, simd_storeu_si128>;
@@ -625,7 +622,7 @@ void processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDst, int wid
 
     auto prepareBuffers_op = prepareBuffers_sse2;
     auto finalizePlane_op = finalizePlane_sse2;
-    if (is16byteAligned(pSrc)) {
+    if (IsPtrAligned(pSrc, 16)) {
         prepareBuffers_op = prepareBuffers_asse2;
         finalizePlane_op = finalizePlane_asse2;
     }
