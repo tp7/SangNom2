@@ -576,7 +576,7 @@ public:
     PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
     int __stdcall SangNom2::SetCacheHints(int cachehints, int frame_range) override {
-        return cachehints == CACHE_GET_MTMODE ? MT_NICE_PLUGIN : 0;
+        return cachehints == CACHE_GET_MTMODE ? MT_NICE_FILTER : 0;
     }
 
 private:
@@ -652,7 +652,7 @@ PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
 
     auto env2 = static_cast<IScriptEnvironment2*>(env);
     
-    auto buffersPool = reinterpret_cast<BYTE*>(env2->Allocate(bufferSize_*BUFFERS_COUNT, 16, true));
+    auto buffersPool = reinterpret_cast<BYTE*>(env2->Allocate(bufferSize_*BUFFERS_COUNT, 16, AVS_POOLED_ALLOC));
     if (buffersPool == nullptr) {
         env->ThrowError("Sangnom2: Failed to allocate buffer. Out of memory.");
     }
