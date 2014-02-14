@@ -678,7 +678,7 @@ PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
 
 AVSValue __cdecl Create_SangNom2(AVSValue args, void*, IScriptEnvironment* env) {
     if (!env->FunctionExists("SetFilterMtMode")) {
-        env->ThrowError("This plugin only works with multithreaded versions of Avisynth+!");
+        env->ThrowError("SangNom2: this plugin only works with multithreaded versions of Avisynth+!");
     }
 
     enum { CLIP, ORDER, AA, AAC };
