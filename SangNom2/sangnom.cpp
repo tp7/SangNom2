@@ -663,6 +663,7 @@ void prepare_buffers(IScriptEnvironment2* env, const uint8_t* srcp, int width, i
             );
 
         completion->Wait();
+        completion->Destroy();
     }
     else
     {
@@ -702,6 +703,7 @@ void process_buffers(IScriptEnvironment2* env, uint8_t* buffers[BUFFERS_COUNT], 
             }, &datas[i], completion);
         }
         completion->Wait();
+        completion->Destroy();
     }
     else
     {
