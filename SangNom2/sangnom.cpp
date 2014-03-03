@@ -1,8 +1,11 @@
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <avisynth.h>
 #include <avs/alignment.h>
 #include <emmintrin.h>
 #include <thread>
+#include <stdint.h>
 
 #ifdef __INTEL_COMPILER
 #define SG_FORCEINLINE inline
@@ -355,13 +358,15 @@ static SG_FORCEINLINE void prepareBuffersLine(const BYTE* pSrc, const BYTE *pSrc
 
 
 template<decltype(simd_load_si128) simd_load>
-static void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, int height, int srcPitch, int bufferPitch) {
+static void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, int height, int srcPitch, int bufferPitch, int bufferOffset)
+{
     auto pSrcn2 = pSrc + srcPitch*2;
 
-    int bufferOffset = bufferPitch;
+    bufferOffset += bufferPitch;
     int sse2Width = (width - 1 - 16) / 16 * 16 + 16;
 
-    for (int y = 0; y < height / 2 - 1; y++) {
+    for (int y = 0; y < height / 2 - 1; y++)
+    {
         prepareBuffersLine<BorderMode::LEFT, simd_load, simd_store_si128>(pSrc, pSrcn2, pBuffers, bufferOffset, 16);
 
         prepareBuffersLine<BorderMode::NONE, simd_load, simd_store_si128>(pSrc + 16, pSrcn2+16, pBuffers, bufferOffset+16, sse2Width - 16);
@@ -539,14 +544,17 @@ static SG_FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn
 }
 
 template<decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
-static void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch, int bufferPitch, int width, int height, int aa) {
+static void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch,
+    int bufferPitch, int width, int height, int aa, int bufferOffset)
+{
     auto pDstn = pDst + dstPitch;
     auto pSrcn2 = pSrc + srcPitch*2;
     auto aav = _mm_set1_epi8(aa);
-    int bufferOffset = bufferPitch;
+    bufferOffset += bufferPitch;
     int sse2Width = (width - 1 - 16) / 16 * 16 + 16;
 
-    for (int y = 0; y < height / 2 - 1; ++y) {
+    for (int y = 0; y < height / 2 - 1; ++y)
+    {
         finalizePlaneLine<BorderMode::LEFT, simd_load, simd_load_si128, simd_store>(pSrc, pSrcn2, pDstn, pBuffers, bufferOffset, 16, aav);
 
         finalizePlaneLine<BorderMode::NONE, simd_load, simd_load_si128, simd_store>(pSrc + 16, pSrcn2+16, pDstn+16, pBuffers, bufferOffset+16, sse2Width - 16, aav);
@@ -605,37 +613,223 @@ SangNom2::SangNom2(PClip child, int order, int aa, int aac, IScriptEnvironment* 
         bufferHeight_ = (vi.height + 1) / 2;
         bufferSize_ = bufferPitch_ * (bufferHeight_+1);
        
-        aa_ = (21 * min(128, aa)) / 16;
-        aaUv_ = (21 * min(128, aac)) / 16;
+        aa_ = (21 * std::min(128, aa)) / 16;
+        aaUv_ = (21 * std::min(128, aac)) / 16;
 }
 
-void processPlane(IScriptEnvironment* env, const BYTE* pSrc, BYTE* pDst, int width, int height, 
-    int srcPitch, int dstPitch, int aa, int offset,
-    BYTE* buffers[BUFFERS_COUNT], int bufferPitch, int bufferHeight) {
-    env->BitBlt(pDst + offset * dstPitch, dstPitch * 2, pSrc + offset * srcPitch, srcPitch * 2, width, height / 2);
-
-    if (offset == 1) {
-        env->BitBlt(pDst, dstPitch, pSrc + srcPitch, srcPitch, width, 1);
-    } else {
-        env->BitBlt(pDst+dstPitch * (height-1), dstPitch, pSrc + srcPitch*(height-2), srcPitch, width, 1);
-    }
+void prepare_buffers(IScriptEnvironment2* env, const BYTE* srcp, int width, int height,
+    int src_pitch, int offset, BYTE* buffers[BUFFERS_COUNT], int buffer_pitch, int buffer_height)
+{
+    int internal_threads = env->GetProperty(AEP_THREADPOOL_THREADS);
+    bool internal_mt = env->GetProperty(AEP_FILTERCHAIN_THREADS) == 1 && internal_threads > 1;
 
     auto prepareBuffers_op = prepareBuffers_sse2;
-    auto finalizePlane_op = finalizePlane_sse2;
-    if (IsPtrAligned(pSrc, 16)) {
+    if (IsPtrAligned(srcp, 16))
+    {
         prepareBuffers_op = prepareBuffers_asse2;
+    }
+    
+    if (internal_mt)
+    {
+        struct FunctionData
+        {
+            const BYTE* srcp;
+            BYTE** buffers;
+            int width;
+            int height;
+            int src_pitch;
+            int buffer_pitch;
+            int buffer_offset;
+            decltype(prepareBuffers_asse2) op;
+        };
+        FunctionData datas[3];
+        int pool_threads = std::min(3, internal_threads);
+        int heightPerThread = height / (pool_threads + 1);
+        heightPerThread += heightPerThread % 2;
+        auto completion = env->NewCompletion(pool_threads);
+
+        for (int i = 0; i < pool_threads; ++i)
+        {
+            datas[i].srcp = srcp + (offset+i*heightPerThread)*src_pitch;
+            datas[i].buffers = buffers;
+            datas[i].width = width;
+            datas[i].height = heightPerThread + 2;
+            datas[i].src_pitch = src_pitch;
+            datas[i].buffer_pitch = buffer_pitch;
+            datas[i].buffer_offset = heightPerThread / 2 * i * buffer_pitch;
+            datas[i].op = prepareBuffers_op;
+
+            env->ParallelJob([](IScriptEnvironment2* env, void* data) {
+                auto d = reinterpret_cast<FunctionData*>(data);
+                d->op(d->srcp, d->buffers, d->width, d->height, d->src_pitch, d->buffer_pitch, d->buffer_offset);
+                return AVSValue();
+            }, &datas[i], completion);
+        }
+
+        int heightOffset = height - (heightPerThread * pool_threads);
+        prepareBuffers_op(
+            srcp + (offset+pool_threads*heightPerThread)*src_pitch,
+            buffers,
+            width,
+            height - (heightPerThread * pool_threads),
+            src_pitch,
+            buffer_pitch,
+            heightPerThread / 2 * pool_threads * buffer_pitch
+            );
+
+        completion->Wait();
+    }
+    else
+    {
+        prepareBuffers_op(srcp + offset*src_pitch, buffers, width, height, src_pitch, buffer_pitch, 0);
+    }
+}
+
+void process_buffers(IScriptEnvironment2* env, BYTE* buffers[BUFFERS_COUNT], int buffer_pitch, int buffer_height)
+{
+    int internal_threads = env->GetProperty(AEP_THREADPOOL_THREADS);
+    bool internal_mt = env->GetProperty(AEP_FILTERCHAIN_THREADS) == 1 && internal_threads > 1;
+    if (internal_mt)
+    {
+        struct FunctionData
+        {
+            uint8_t *buffer;
+            int buffer_pitch;
+            int buffer_height;
+        };
+
+        auto completion = env->NewCompletion(BUFFERS_COUNT);
+        FunctionData datas[BUFFERS_COUNT];
+        for (int i = 0; i < BUFFERS_COUNT; i++)
+        {
+            datas[i].buffer = buffers[i];
+            datas[i].buffer_pitch = buffer_pitch;
+            datas[i].buffer_height = buffer_height;
+            env->ParallelJob([](IScriptEnvironment2* env, void* data) {
+                auto params = reinterpret_cast<FunctionData*>(data);
+                auto temp = (uint8_t*)alloca(params->buffer_pitch * 2);
+                if (temp == nullptr)
+                {
+                    env->ThrowError("Failed to allocate buffer on stack. This is a bug");
+                }
+                processBuffer(params->buffer, temp, params->buffer_pitch, params->buffer_height);
+                return AVSValue();
+            }, &datas[i], completion);
+        }
+        completion->Wait();
+    }
+    else
+    {
+        auto temp = (uint8_t*)alloca(buffer_pitch * 2);
+        if (temp == nullptr)
+        {
+            env->ThrowError("Failed to allocate buffer on stack. This is a bug");
+        }
+        for (int i = 0; i < BUFFERS_COUNT; ++i)
+        {
+            processBuffer(buffers[i], temp, buffer_pitch, buffer_height);
+        }
+    }
+}
+
+void finalize_plane(IScriptEnvironment2* env, const BYTE* srcp, BYTE* dstp, int width, int height,
+    int src_pitch, int dst_pitch, int aa, int offset,
+    BYTE* buffers[BUFFERS_COUNT], int buffer_pitch)
+{
+    auto finalizePlane_op = finalizePlane_sse2;
+    if (IsPtrAligned(srcp, 16))
+    {
         finalizePlane_op = finalizePlane_asse2;
     }
 
-    prepareBuffers_op(pSrc + offset*srcPitch, buffers, width, height, srcPitch, bufferPitch);
-    auto temp = (BYTE*)_alloca(bufferPitch * 2);
-    if (temp == nullptr) {
-        env->ThrowError("Failed to allocate buffer on stack. This is a bug");
+    int internal_threads = env->GetProperty(AEP_THREADPOOL_THREADS);
+    bool internal_mt = env->GetProperty(AEP_FILTERCHAIN_THREADS) == 1 && internal_threads > 1;
+
+    if (internal_mt)
+    {
+        int pool_threads = std::min(3, internal_threads);
+        int heightPerThread = height / (pool_threads + 1);
+        heightPerThread += heightPerThread % 2;
+        auto completion = env->NewCompletion(pool_threads);
+
+        struct FunctionData
+        {
+            const BYTE* srcp;
+            BYTE* dstp;
+            BYTE** buffers;
+            int width;
+            int height;
+            int src_pitch;
+            int dst_pitch;
+            int buffer_pitch;
+            int buffer_offset;
+            int aa;
+            decltype(finalizePlane_sse2) op;
+        };
+        FunctionData datas[4];
+        for (int i = 0; i < pool_threads; ++i)
+        {
+            datas[i].srcp = srcp + (offset+i*heightPerThread)*src_pitch;
+            datas[i].dstp = dstp + (offset+i*heightPerThread)*dst_pitch;
+            datas[i].buffers = buffers;
+            datas[i].width = width;
+            datas[i].height = heightPerThread + 2;
+            datas[i].src_pitch = src_pitch;
+            datas[i].dst_pitch = dst_pitch;
+            datas[i].buffer_pitch = buffer_pitch;
+            datas[i].aa = aa;
+            datas[i].buffer_offset = heightPerThread / 2 * i * buffer_pitch;
+            datas[i].op = finalizePlane_op;
+
+            env->ParallelJob([](IScriptEnvironment2* env, void* data) {
+                auto d = reinterpret_cast<FunctionData*>(data);
+                d->op(d->srcp, d->dstp, d->buffers, d->src_pitch, d->dst_pitch, d->buffer_pitch, d->width, d->height, d->aa, d->buffer_offset);
+                return AVSValue();
+            }, &datas[i], completion);
+        }
+
+        finalizePlane_op(
+            srcp + (offset+pool_threads*heightPerThread)*src_pitch,
+            dstp + (offset+pool_threads*heightPerThread)*dst_pitch,
+            buffers,
+            src_pitch,
+            dst_pitch,
+            buffer_pitch,
+            width,
+            height - (heightPerThread * pool_threads),
+            aa,
+            heightPerThread * pool_threads / 2 * buffer_pitch
+            );
+
+        completion->Wait();
     }
-    for (int i = 0; i < BUFFERS_COUNT; ++i) {
-        processBuffer(buffers[i], temp, bufferPitch, bufferHeight);
+    else
+    {
+        finalizePlane_op(srcp + offset * src_pitch, dstp + offset * dst_pitch, buffers, src_pitch, dst_pitch, buffer_pitch, width, height, aa, 0);
     }
-    finalizePlane_op(pSrc + offset * srcPitch, pDst + offset * dstPitch, buffers, srcPitch, dstPitch, bufferPitch, width, height, aa);
+}
+
+void processPlane(IScriptEnvironment2* env, const BYTE* srcp, BYTE* dstp, int width, int height,
+    int src_pitch, int dst_pitch, int aa, int offset,
+    BYTE* buffers[BUFFERS_COUNT], int buffer_pitch, int buffer_height)
+{
+    int internal_threads = env->GetProperty(AEP_THREADPOOL_THREADS);
+    bool internal_mt = env->GetProperty(AEP_FILTERCHAIN_THREADS) == 1 && internal_threads > 1;
+    
+    env->BitBlt(dstp + offset * dst_pitch, dst_pitch * 2, srcp + offset * src_pitch, src_pitch * 2, width, height / 2);
+
+    if (offset == 1)
+    {
+        env->BitBlt(dstp, dst_pitch, srcp + src_pitch, src_pitch, width, 1);
+    }
+    else
+    {
+        env->BitBlt(dstp+dst_pitch * (height-1), dst_pitch, srcp + src_pitch*(height-2), src_pitch, width, 1);
+    }
+
+    prepare_buffers(env, srcp, width, height, src_pitch, offset, buffers, buffer_pitch, buffer_height);
+    process_buffers(env, buffers, buffer_pitch, buffer_height);
+    finalize_plane(env, srcp, dstp, width, height, src_pitch, dst_pitch, aa, offset, buffers, buffer_pitch);
 }
 
 
@@ -659,17 +853,16 @@ PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
         memset(buffers[i], 0, bufferPitch_); //this is important... I think
     }
 
-    processPlane(env, srcFrame->GetReadPtr(PLANAR_Y), dstFrame->GetWritePtr(PLANAR_Y), srcFrame->GetRowSize(PLANAR_Y), 
+    processPlane(env2, srcFrame->GetReadPtr(PLANAR_Y), dstFrame->GetWritePtr(PLANAR_Y), srcFrame->GetRowSize(PLANAR_Y), 
         srcFrame->GetHeight(PLANAR_Y), srcFrame->GetPitch(PLANAR_Y), srcFrame->GetPitch(PLANAR_Y), aa_, offset, buffers, bufferPitch_, bufferHeight_);
 
     if (!vi.IsY8()) {
-        processPlane(env, srcFrame->GetReadPtr(PLANAR_U), dstFrame->GetWritePtr(PLANAR_U), srcFrame->GetRowSize(PLANAR_U), 
+        processPlane(env2, srcFrame->GetReadPtr(PLANAR_U), dstFrame->GetWritePtr(PLANAR_U), srcFrame->GetRowSize(PLANAR_U), 
             srcFrame->GetHeight(PLANAR_U), srcFrame->GetPitch(PLANAR_U), srcFrame->GetPitch(PLANAR_U), aaUv_, offset, buffers, bufferPitch_, bufferHeight_);
 
-        processPlane(env, srcFrame->GetReadPtr(PLANAR_V), dstFrame->GetWritePtr(PLANAR_V), srcFrame->GetRowSize(PLANAR_V), 
+        processPlane(env2, srcFrame->GetReadPtr(PLANAR_V), dstFrame->GetWritePtr(PLANAR_V), srcFrame->GetRowSize(PLANAR_V), 
             srcFrame->GetHeight(PLANAR_V), srcFrame->GetPitch(PLANAR_V), srcFrame->GetPitch(PLANAR_V), aaUv_, offset, buffers, bufferPitch_, bufferHeight_);
     }
-
     env2->Free(buffersPool);
 
     return dstFrame;
