@@ -13,47 +13,32 @@
 #define SG_FORCEINLINE __forceinline
 #endif
 
-#define USE_MOVPS
-
 extern "C" {
-
-    SG_FORCEINLINE __m128i simd_load_si128(const BYTE *ptr) {
-#ifdef USE_MOVPS
-        return _mm_castps_si128(_mm_load_ps(reinterpret_cast<const float*>(ptr)));
-#else
+    SG_FORCEINLINE __m128i simd_load_si128(const uint8_t *ptr) 
+    {
         return _mm_load_si128(reinterpret_cast<const __m128i*>(ptr));
-#endif
     }
 
-    SG_FORCEINLINE __m128i simd_loadu_si128(const BYTE *ptr) {
-#ifdef USE_MOVPS
-        return _mm_castps_si128(_mm_loadu_ps(reinterpret_cast<const float*>(ptr)));
-#else
+    SG_FORCEINLINE __m128i simd_loadu_si128(const uint8_t *ptr) 
+    {
         return _mm_loadu_si128(reinterpret_cast<const __m128i*>(ptr));
-#endif
     }
 
-    SG_FORCEINLINE void simd_store_si128(BYTE *ptr, __m128i value) {
-#ifdef USE_MOVPS
-        _mm_store_ps(reinterpret_cast<float*>(ptr), _mm_castsi128_ps(value));
-#else
+    SG_FORCEINLINE void simd_store_si128(uint8_t *ptr, __m128i value)
+    {
         _mm_store_si128(reinterpret_cast<__m128i*>(ptr), value);
-#endif
     }
 
-    SG_FORCEINLINE void simd_storeu_si128(BYTE *ptr, __m128i value) {
-#ifdef USE_MOVPS
-        _mm_storeu_ps(reinterpret_cast<float*>(ptr), _mm_castsi128_ps(value));
-#else
+    SG_FORCEINLINE void simd_storeu_si128(uint8_t *ptr, __m128i value)
+    {
         _mm_storeu_si128(reinterpret_cast<__m128i*>(ptr), value);
-#endif
     }
 }
 
 #pragma warning(disable: 4309)
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_one_to_left(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_one_to_left(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -66,7 +51,7 @@ static SG_FORCEINLINE __m128i simd_load_one_to_left(const BYTE *ptr) {
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_two_to_left(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_two_to_left(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -80,7 +65,7 @@ static SG_FORCEINLINE __m128i simd_load_two_to_left(const BYTE *ptr) {
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_three_to_left(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_three_to_left(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi8(0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -95,7 +80,7 @@ static SG_FORCEINLINE __m128i simd_load_three_to_left(const BYTE *ptr) {
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_one_epi16_to_left(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_one_epi16_to_left(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi16(0xFFFF, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -109,7 +94,7 @@ static SG_FORCEINLINE __m128i simd_load_one_epi16_to_left(const BYTE *ptr) {
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_two_epi16_to_left(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_two_epi16_to_left(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi16(0xFFFF, 0xFFFF, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -123,7 +108,7 @@ static SG_FORCEINLINE __m128i simd_load_two_epi16_to_left(const BYTE *ptr) {
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_three_epi16_to_left(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_three_epi16_to_left(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_setr_epi16(0xFFFF, 0xFFFF, 0xFFFF, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -139,7 +124,7 @@ static SG_FORCEINLINE __m128i simd_load_three_epi16_to_left(const BYTE *ptr) {
 
 //note the difference between set and setr for left and right loading
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_one_to_right(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_one_to_right(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -152,7 +137,7 @@ static SG_FORCEINLINE __m128i simd_load_one_to_right(const BYTE *ptr) {
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_two_to_right(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_two_to_right(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -166,7 +151,7 @@ static SG_FORCEINLINE __m128i simd_load_two_to_right(const BYTE *ptr) {
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_three_to_right(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_three_to_right(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi8(0xFF, 0xFF, 0xFF, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -181,7 +166,7 @@ static SG_FORCEINLINE __m128i simd_load_three_to_right(const BYTE *ptr) {
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_one_epi16_to_right(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_one_epi16_to_right(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi16(0xFFFF, 00, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -196,7 +181,7 @@ static SG_FORCEINLINE __m128i simd_load_one_epi16_to_right(const BYTE *ptr) {
 
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_two_epi16_to_right(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_two_epi16_to_right(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi16(0xFFFF, 0xFFFF, 00, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -210,7 +195,7 @@ static SG_FORCEINLINE __m128i simd_load_two_epi16_to_right(const BYTE *ptr) {
 }
 
 template<bool isBorder, decltype(simd_load_si128) simd_load>
-static SG_FORCEINLINE __m128i simd_load_three_epi16_to_right(const BYTE *ptr) {
+static SG_FORCEINLINE __m128i simd_load_three_epi16_to_right(const uint8_t *ptr) {
     if (isBorder) {
         auto mask = _mm_set_epi16(0xFFFF, 0xFFFF, 0xFFFF, 00, 00, 00, 00, 00);
         auto val = simd_load(ptr);
@@ -299,7 +284,7 @@ static SG_FORCEINLINE __m128i blendAvgOnMinimalBuffer(const __m128i& a1, const _
 }
 
 template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
-static SG_FORCEINLINE void prepareBuffersLine(const BYTE* pSrc, const BYTE *pSrcn2, BYTE* pBuffers[BUFFERS_COUNT], int bufferOffset, int width) {
+static SG_FORCEINLINE void prepareBuffersLine(const uint8_t* pSrc, const uint8_t *pSrcn2, uint8_t* pBuffers[BUFFERS_COUNT], int bufferOffset, int width) {
     for (int x = 0; x < width; x += 16) {
         auto cur_minus_3   = simd_load_three_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
         auto cur_minus_2   = simd_load_two_to_left<border == BorderMode::LEFT, simd_load>(pSrc+x); 
@@ -358,7 +343,7 @@ static SG_FORCEINLINE void prepareBuffersLine(const BYTE* pSrc, const BYTE *pSrc
 
 
 template<decltype(simd_load_si128) simd_load>
-static void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int width, int height, int srcPitch, int bufferPitch, int bufferOffset)
+static void prepareBuffers(const uint8_t* pSrc, uint8_t* pBuffers[BUFFERS_COUNT], int width, int height, int srcPitch, int bufferPitch, int bufferOffset)
 {
     auto pSrcn2 = pSrc + srcPitch*2;
 
@@ -380,7 +365,7 @@ static void prepareBuffers(const BYTE* pSrc, BYTE* pBuffers[BUFFERS_COUNT], int 
 }
 
 template<BorderMode border>
-static SG_FORCEINLINE void finalizeBufferProcessingBlock(BYTE* pTemp, BYTE* pSrcn, int x) {
+static SG_FORCEINLINE void finalizeBufferProcessingBlock(uint8_t* pTemp, uint8_t* pSrcn, int x) {
     auto cur_minus_6_lo = simd_load_three_epi16_to_left<border == BorderMode::LEFT, simd_load_si128>(pTemp+x*2);
     auto cur_minus_4_lo = simd_load_two_epi16_to_left<border == BorderMode::LEFT, simd_load_si128>(pTemp+x*2);
     auto cur_minus_2_lo = simd_load_one_epi16_to_left<border == BorderMode::LEFT, simd_load_si128>(pTemp+x*2);
@@ -419,7 +404,7 @@ static SG_FORCEINLINE void finalizeBufferProcessingBlock(BYTE* pTemp, BYTE* pSrc
     simd_store_si128(pSrcn+x, result);
 }
 
-static void processBuffer(BYTE* pBuffer, BYTE* pTemp, int pitch, int height) {
+static void processBuffer(uint8_t* pBuffer, uint8_t* pTemp, int pitch, int height) {
         auto pSrc = pBuffer;
         auto pSrcn = pSrc + pitch;
         auto pSrcn2 = pSrcn + pitch;
@@ -464,7 +449,7 @@ static void processBuffer(BYTE* pBuffer, BYTE* pTemp, int pitch, int height) {
 }
 
 template<BorderMode border, decltype(simd_load_si128) simd_load, decltype(simd_load_si128) simd_load_buffer, decltype(simd_store_si128) simd_store>
-static SG_FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn2, BYTE* pDstn, BYTE* pBuffers[BUFFERS_COUNT], int bufferOffset, int width, const __m128i& aath) {
+static SG_FORCEINLINE void finalizePlaneLine(const uint8_t* pSrc, const uint8_t* pSrcn2, uint8_t* pDstn, uint8_t* pBuffers[BUFFERS_COUNT], int bufferOffset, int width, const __m128i& aath) {
     auto zero = _mm_setzero_si128();
     for (int x = 0; x < width; x += 16) {
         auto buf0 = simd_load_buffer(pBuffers[ADIFF_M3_P3] + bufferOffset + x); 
@@ -544,7 +529,7 @@ static SG_FORCEINLINE void finalizePlaneLine(const BYTE* pSrc, const BYTE* pSrcn
 }
 
 template<decltype(simd_load_si128) simd_load, decltype(simd_store_si128) simd_store>
-static void finalizePlane(const BYTE* pSrc, BYTE* pDst, BYTE* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch,
+static void finalizePlane(const uint8_t* pSrc, uint8_t* pDst, uint8_t* pBuffers[BUFFERS_COUNT], int srcPitch, int dstPitch,
     int bufferPitch, int width, int height, int aa, int bufferOffset)
 {
     auto pDstn = pDst + dstPitch;
@@ -617,8 +602,8 @@ SangNom2::SangNom2(PClip child, int order, int aa, int aac, IScriptEnvironment* 
         aaUv_ = (21 * std::min(128, aac)) / 16;
 }
 
-void prepare_buffers(IScriptEnvironment2* env, const BYTE* srcp, int width, int height,
-    int src_pitch, int offset, BYTE* buffers[BUFFERS_COUNT], int buffer_pitch, int buffer_height)
+void prepare_buffers(IScriptEnvironment2* env, const uint8_t* srcp, int width, int height,
+    int src_pitch, int offset, uint8_t* buffers[BUFFERS_COUNT], int buffer_pitch, int buffer_height)
 {
     int internal_threads = env->GetProperty(AEP_THREADPOOL_THREADS);
     bool internal_mt = env->GetProperty(AEP_FILTERCHAIN_THREADS) == 1 && internal_threads > 1;
@@ -633,8 +618,8 @@ void prepare_buffers(IScriptEnvironment2* env, const BYTE* srcp, int width, int 
     {
         struct FunctionData
         {
-            const BYTE* srcp;
-            BYTE** buffers;
+            const uint8_t* srcp;
+            uint8_t** buffers;
             int width;
             int height;
             int src_pitch;
@@ -685,7 +670,7 @@ void prepare_buffers(IScriptEnvironment2* env, const BYTE* srcp, int width, int 
     }
 }
 
-void process_buffers(IScriptEnvironment2* env, BYTE* buffers[BUFFERS_COUNT], int buffer_pitch, int buffer_height)
+void process_buffers(IScriptEnvironment2* env, uint8_t* buffers[BUFFERS_COUNT], int buffer_pitch, int buffer_height)
 {
     int internal_threads = env->GetProperty(AEP_THREADPOOL_THREADS);
     bool internal_mt = env->GetProperty(AEP_FILTERCHAIN_THREADS) == 1 && internal_threads > 1;
@@ -732,9 +717,9 @@ void process_buffers(IScriptEnvironment2* env, BYTE* buffers[BUFFERS_COUNT], int
     }
 }
 
-void finalize_plane(IScriptEnvironment2* env, const BYTE* srcp, BYTE* dstp, int width, int height,
+void finalize_plane(IScriptEnvironment2* env, const uint8_t* srcp, uint8_t* dstp, int width, int height,
     int src_pitch, int dst_pitch, int aa, int offset,
-    BYTE* buffers[BUFFERS_COUNT], int buffer_pitch)
+    uint8_t* buffers[BUFFERS_COUNT], int buffer_pitch)
 {
     auto finalizePlane_op = finalizePlane_sse2;
     if (IsPtrAligned(srcp, 16))
@@ -754,9 +739,9 @@ void finalize_plane(IScriptEnvironment2* env, const BYTE* srcp, BYTE* dstp, int 
 
         struct FunctionData
         {
-            const BYTE* srcp;
-            BYTE* dstp;
-            BYTE** buffers;
+            const uint8_t* srcp;
+            uint8_t* dstp;
+            uint8_t** buffers;
             int width;
             int height;
             int src_pitch;
@@ -809,9 +794,9 @@ void finalize_plane(IScriptEnvironment2* env, const BYTE* srcp, BYTE* dstp, int 
     }
 }
 
-void processPlane(IScriptEnvironment2* env, const BYTE* srcp, BYTE* dstp, int width, int height,
+void processPlane(IScriptEnvironment2* env, const uint8_t* srcp, uint8_t* dstp, int width, int height,
     int src_pitch, int dst_pitch, int aa, int offset,
-    BYTE* buffers[BUFFERS_COUNT], int buffer_pitch, int buffer_height)
+    uint8_t* buffers[BUFFERS_COUNT], int buffer_pitch, int buffer_height)
 {
     int internal_threads = env->GetProperty(AEP_THREADPOOL_THREADS);
     bool internal_mt = env->GetProperty(AEP_FILTERCHAIN_THREADS) == 1 && internal_threads > 1;
@@ -843,11 +828,11 @@ PVideoFrame SangNom2::GetFrame(int n, IScriptEnvironment* env) {
 
     auto env2 = static_cast<IScriptEnvironment2*>(env);
     
-    auto buffersPool = reinterpret_cast<BYTE*>(env2->Allocate(bufferSize_*BUFFERS_COUNT, 16, AVS_POOLED_ALLOC));
+    auto buffersPool = reinterpret_cast<uint8_t*>(env2->Allocate(bufferSize_*BUFFERS_COUNT, 16, AVS_POOLED_ALLOC));
     if (buffersPool == nullptr) {
         env->ThrowError("Sangnom2: Failed to allocate buffer. Out of memory.");
     }
-    BYTE *buffers[BUFFERS_COUNT];
+    uint8_t *buffers[BUFFERS_COUNT];
     for (int i = 0; i < BUFFERS_COUNT; i++) {
         buffers[i] = buffersPool + bufferSize_ * i;
         memset(buffers[i], 0, bufferPitch_); //this is important... I think
