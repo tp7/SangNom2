@@ -609,11 +609,11 @@ SangNom2::SangNom2(PClip child, int order, int aa, int aac, int threads, IScript
         }
 
         if (!(env->GetCPUFlags() && CPUF_SSE2)) {
-            env->ThrowError("Sorry, SSE2 is requried");
+            env->ThrowError("Sorry, SSE2 is required");
         }
 
         if (vi.width < 16) {
-            env->ThrowError("Sorry, wight must be bigger or equal to 16");
+            env->ThrowError("Sorry, width must be bigger or equal to 16");
         }
 
         bufferPitch_ = (vi.width + 15) / 16 * 16;
